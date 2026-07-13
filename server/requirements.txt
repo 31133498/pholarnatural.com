@@ -15,7 +15,7 @@ python-multipart      # required by OAuth2PasswordRequestForm (admin_auth.py)
 
 # Payments
 stripe
-
+psycopg2
 # Testing
 pytest
 httpx
