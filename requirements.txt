@@ -1,0 +1,21 @@
+fastapi
+uvicorn[standard]
+
+# Settings / validation
+pydantic
+pydantic-settings
+
+# Database ORM
+sqlalchemy
+
+# Auth / security
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart      # required by OAuth2PasswordRequestForm (admin_auth.py)
+
+# Payments
+stripe
+
+# Testing
+pytest
+httpx
