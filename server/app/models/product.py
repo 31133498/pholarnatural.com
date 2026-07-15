@@ -1,12 +1,19 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
+
 from app.db.database import Base
 
 class Product(Base):
     __tablename__ = "products"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
     name = Column(String(255), nullable=False)
     slug = Column(String(255), unique=True, index=True, nullable=False)
     description = Column(Text, nullable=True)
@@ -25,8 +32,12 @@ class Product(Base):
 class ProductImage(Base):
     __tablename__ = "product_images"
 
-    id = Column(Integer, primary_key=True, index=True)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     url = Column(String(500), nullable=False)
     alt = Column(String(255), nullable=True)
     sort_order = Column(Integer, default=0)
@@ -37,8 +48,12 @@ class ProductImage(Base):
 class ProductVariant(Base):
     __tablename__ = "product_variants"
 
-    id = Column(Integer, primary_key=True, index=True)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     weight_grams = Column(Integer, nullable=True)
     weight_label = Column(String(50), nullable=True)  # e.g., "250g", "16oz"
     price_cents = Column(Integer, nullable=False)     # Always store currency as integers (cents)

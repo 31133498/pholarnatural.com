@@ -1,9 +1,10 @@
 from typing import List, Optional
 from datetime import datetime
+from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 class ProductImageBase(BaseModel):
-    id: int
+    id: UUID
     url: str
     alt: Optional[str] = None
     sort_order: int
@@ -11,7 +12,7 @@ class ProductImageBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class ProductVariantBase(BaseModel):
-    id: int
+    id: UUID
     weight_grams: Optional[int] = None
     weight_label: Optional[str] = None
     price_cents: int
@@ -26,7 +27,7 @@ class ProductResponse(BaseModel):
     This is the exact JSON structure the frontend will receive.
     Notice how it nests the images and variants automatically.
     """
-    id: int
+    id: UUID
     name: str
     slug: str
     description: Optional[str] = None
@@ -61,7 +62,6 @@ class VariantUpdate(BaseModel):
 # ----- PRODUCTS -----
 class ProductCreate(BaseModel):
     name: str
-    slug: str
     description: Optional[str] = None
     tagline: Optional[str] = None
     category: Optional[str] = None

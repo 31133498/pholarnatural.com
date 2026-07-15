@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.db.database import SessionLocal
 from app.services.payment_gateway import PaymentGateway
+from app.services.notification_service import NotificationService, PlatformNotificationService
+from app.services.storage_service import CloudinaryStorageService, StorageService
 from app.services.stripe_gateway import StripeGateway
 from app.core.config import settings
 from app.models.admin import AdminUser
@@ -29,6 +31,12 @@ def get_payment_gateway() -> PaymentGateway:
     During testing, we can easily override this to return a MockPaymentGateway.
     """
     return StripeGateway()
+
+def get_storage_service() -> StorageService:
+    return CloudinaryStorageService()
+
+def get_notification_service() -> NotificationService:
+    return PlatformNotificationService()
 
 def get_current_admin(
     token: str = Depends(oauth2_scheme), 

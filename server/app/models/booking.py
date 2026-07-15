@@ -1,13 +1,19 @@
+import uuid
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Time, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import UUID
 from app.db.database import Base
 
 class Booking(Base):
     __tablename__ = "bookings"
 
-    id = Column(Integer, primary_key=True, index=True)
-    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    service_id = Column(UUID(as_uuid=True), ForeignKey("services.id"), nullable=False)
     
     # Customer Info
     customer_name = Column(String(255), nullable=False)
@@ -34,7 +40,11 @@ class Booking(Base):
 class BlockedDate(Base):
     __tablename__ = "blocked_dates"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
     date = Column(Date, nullable=False, unique=True, index=True)
     reason = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

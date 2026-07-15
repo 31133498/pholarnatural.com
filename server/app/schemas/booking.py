@@ -1,9 +1,11 @@
+from uuid import UUID
+
 from pydantic import BaseModel, EmailStr
 from datetime import date, time, datetime
 from typing import Optional
 
 class BookingCreate(BaseModel):
-    service_id: int
+    service_id: UUID
     customer_name: str
     customer_email: EmailStr
     customer_phone: Optional[str] = None
@@ -11,8 +13,8 @@ class BookingCreate(BaseModel):
     start_time: time
 
 class BookingResponse(BaseModel):
-    id: int
-    service_id: int
+    id: UUID
+    service_id: UUID
     customer_name: str
     customer_email: EmailStr
     booking_date: date
@@ -25,7 +27,7 @@ class BookingResponse(BaseModel):
 
 class CheckoutResponse(BaseModel):
     checkout_url: str
-    booking_id: int
+    booking_id: UUID
 
 # ----- BLOCKED DATES -----
 class BlockedDateCreate(BaseModel):
@@ -33,7 +35,7 @@ class BlockedDateCreate(BaseModel):
     reason: Optional[str] = None
 
 class BlockedDateResponse(BaseModel):
-    id: int
+    id: UUID
     date: date
     reason: Optional[str]
     created_at: datetime

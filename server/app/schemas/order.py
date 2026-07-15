@@ -1,10 +1,12 @@
+from uuid import UUID
+
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Any
 from datetime import date, datetime
 
 # Represents a single item in the shopping cart
 class CartItem(BaseModel):
-    variant_id: int
+    variant_id: UUID
     quantity: int
 
 class AddressSchema(BaseModel):
@@ -24,7 +26,7 @@ class OrderCreate(BaseModel):
     discount_code: Optional[str] = None
 
 class OrderResponse(BaseModel):
-    id: int
+    id: UUID
     customer_name: str
     customer_email: EmailStr
     subtotal_cents: int
@@ -37,14 +39,14 @@ class OrderResponse(BaseModel):
 
 class CheckoutResponse(BaseModel):
     checkout_url: str
-    order_id: int
+    order_id: UUID
 
 class BlockedDateCreate(BaseModel):
     date: date
     reason: Optional[str] = None
 
 class BlockedDateResponse(BaseModel):
-    id: int
+    id: UUID
     date: date
     reason: Optional[str]
     created_at: datetime

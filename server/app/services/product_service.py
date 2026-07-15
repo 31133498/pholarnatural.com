@@ -1,6 +1,12 @@
+import os
+import re
+import shutil
+import uuid
+
+from app.services.storage_service import StorageService
 from sqlalchemy.orm import Session, selectinload
-from fastapi import HTTPException, status
-from app.models.product import Product, ProductVariant
+from fastapi import HTTPException, status, UploadFile
+from app.models.product import Product, ProductImage, ProductVariant
 from app.schemas.product import ProductCreate, ProductUpdate, VariantCreate, VariantUpdate
 
 def get_active_products(db: Session):
@@ -41,13 +47,12 @@ def create_product(db: Session, product_in: ProductCreate):
     """Create a new product and its initial variants."""
     
     # Check if slug exists
-    if db.query(Product).filter(Product.slug == product_in.slug).first():
-        raise HTTPException(status_code=400, detail="Product with this slug already exists.")
+    unique_slug = generate_unique_slug(db, product_in.name)
         
     # Create the Product
     db_product = Product(
         name=product_in.name,
-        slug=product_in.slug,
+        slug=unique_slug,
         description=product_in.description,
         tagline=product_in.tagline,
         category=product_in.category,
@@ -117,3 +122,100 @@ def add_variant_to_product(db: Session, product_id: int, variant_in: VariantCrea
     db.commit()
     db.refresh(db_variant)
     return db_variant
+
+
+def update_variant(db: Session, variant_id: int, variant_in: VariantUpdate):
+    """Update an existing variant."""
+    db_variant = db.query(ProductVariant).filter(ProductVariant.id == variant_id).first()
+    if not db_variant:
+        raise HTTPException(status_code=404, detail="Variant not found")
+        
+    update_data = variant_in.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_variant, key, value)
+        
+    db.commit()
+    db.refresh(db_variant)
+    return db_variant
+
+def delete_variant(db: Session, variant_id: int):
+    """Delete a variant."""
+    db_variant = db.query(ProductVariant).filter(ProductVariant.id == variant_id).first()
+    if not db_variant:
+        raise HTTPException(status_code=404, detail="Variant not found")
+        
+    db.delete(db_variant)
+    db.commit()
+    return {"message": "Variant deleted successfully"}
+
+def upload_product_image(
+    db: Session, 
+    product_id: int, 
+    file: UploadFile,
+    storage: StorageService # INJECT HERE
+):
+    """Save an uploaded image via Cloudinary and add it to the database."""
+    db_product = db.query(Product).filter(Product.id == product_id).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    # Upload using the injected service
+    try:
+        # Pass the raw file bytes
+        image_url = storage.upload_image(file.file, folder="products")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
+    
+    db_image = ProductImage(product_id=product_id, url=image_url, alt=db_product.name)
+    db.add(db_image)
+    db.commit()
+    db.refresh(db_image)
+    return db_image
+
+def delete_product_image(
+    db: Session, 
+    product_id: int, 
+    image_id: int,
+    storage: StorageService # INJECT HERE
+):
+    """Delete an image record from the DB and Cloudinary."""
+    db_image = db.query(ProductImage).filter(ProductImage.id == image_id, ProductImage.product_id == product_id).first()
+    if not db_image:
+        raise HTTPException(status_code=404, detail="Image not found")
+        
+    # Delete from Cloudinary
+    storage.delete_image(db_image.url)
+    
+    db.delete(db_image)
+    db.commit()
+    return {"message": "Image deleted successfully"}
+
+
+
+
+
+
+
+def generate_unique_slug(db: Session, slug: str) -> str:
+    """
+    Generate a unique slug by appending a number if it already exists.
+    Example:
+        iphone -> iphone
+        iphone -> iphone-1
+        iphone -> iphone-2
+    """
+    base_slug = re.sub(r'[^a-zA-Z0-9-]', '', slug.replace(' ', '-')).strip('-').lower()
+
+    # If the slug doesn't exist, return it
+    if not db.query(Product).filter(Product.slug == base_slug).first():
+        return base_slug
+
+    counter = 1
+    while True:
+        new_slug = f"{base_slug}-{counter}"
+        exists = db.query(Product).filter(Product.slug == new_slug).first()
+
+        if not exists:
+            return new_slug
+
+        counter += 1

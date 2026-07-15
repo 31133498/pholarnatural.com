@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
+from pydantic import BaseModel
 
+from app.schemas.admin import AdminCreate, AdminResponse
 from app.api.dependencies import get_db, get_current_admin
 from app.core import security
 from app.core.config import settings
 from app.models.admin import AdminUser
-from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -45,3 +46,31 @@ def login_for_access_token(
 def get_admin_profile(current_admin: AdminUser = Depends(get_current_admin)):
     """A protected test route to verify the token works."""
     return {"email": current_admin.email, "is_active": current_admin.is_active}
+
+@router.post("/register", response_model=AdminResponse, status_code=status.HTTP_201_CREATED)
+def register_admin(admin_in: AdminCreate, db: Session = Depends(get_db)):
+    """Create a new admin user using a secret key."""
+    # 1. Verify the secret key
+    if admin_in.secret_key != settings.ADMIN_REGISTRATION_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Invalid admin registration key."
+        )
+        
+    # 2. Check if email already exists
+    existing_admin = db.query(AdminUser).filter(AdminUser.email == admin_in.email).first()
+    if existing_admin:
+        raise HTTPException(status_code=400, detail="Email already registered.")
+        
+    # 3. Hash password and save
+    print(admin_in)
+    hashed_password = security.get_password_hash(admin_in.password)
+    new_admin = AdminUser(
+        email=admin_in.email,
+        hashed_password=hashed_password
+    )
+    
+    db.add(new_admin)
+    db.commit()
+    db.refresh(new_admin)
+    return new_admin

@@ -1,13 +1,20 @@
+import uuid
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import JSONB # Use JSON for flexible address storage
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import UUID
+
 from app.db.database import Base
 
 class Discount(Base):
     __tablename__ = "discounts"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
     code = Column(String(50), unique=True, index=True, nullable=False)
     discount_type = Column(String(20), nullable=False) # "percentage" or "fixed"
     value = Column(Integer, nullable=False) # e.g., 10 for 10%, or 500 for $5.00
@@ -20,7 +27,11 @@ class Discount(Base):
 class Order(Base):
     __tablename__ = "orders"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
     customer_name = Column(String(255), nullable=False)
     customer_email = Column(String(255), nullable=False)
     
@@ -36,7 +47,7 @@ class Order(Base):
     status = Column(String(50), default="pending", index=True)
     stripe_session_id = Column(String(255), nullable=True, unique=True)
     
-    discount_id = Column(Integer, ForeignKey("discounts.id"), nullable=True)
+    discount_id = Column(UUID(as_uuid=True), ForeignKey("discounts.id"), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -48,9 +59,13 @@ class Order(Base):
 class OrderItem(Base):
     __tablename__ = "order_items"
 
-    id = Column(Integer, primary_key=True, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
-    product_variant_id = Column(Integer, ForeignKey("product_variants.id"), nullable=False)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    product_variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id"), nullable=False)
     
     # We store these explicitly so if the product changes later, the historical order receipt doesn't change
     product_name = Column(String(255), nullable=False)

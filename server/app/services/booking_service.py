@@ -2,7 +2,7 @@ from typing import Optional
 
 from app.services.payment_gateway import PaymentGateway
 from sqlalchemy.orm import Session
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, time, timedelta, timezone
 from fastapi import HTTPException, status
 
 from app.models.booking import Booking, BlockedDate
@@ -31,6 +31,72 @@ def update_booking_status(db: Session, booking_id: int, new_status: str):
     db.commit()
     db.refresh(booking)
     return booking
+
+
+def get_blocked_dates(db: Session):
+    """Fetch all blocked dates from the database."""
+    # Only return future blocked dates
+    today = datetime.now(timezone.utc).date()
+    return db.query(BlockedDate).filter(BlockedDate.date >= today).all()
+
+def get_available_slots(db: Session, target_date: date, service_id: int = None):
+    """
+    Calculate available time slots for a given date.
+    Assumes operating hours are 9:00 AM to 5:00 PM.
+    """
+    # 1. Check if the entire date is blocked
+    is_blocked = db.query(BlockedDate).filter(BlockedDate.date == target_date).first()
+    if is_blocked:
+        return []
+
+    # 2. Get existing bookings for this date (that aren't cancelled)
+    existing_bookings = db.query(Booking).filter(
+        Booking.booking_date == target_date,
+        Booking.status.in_(["pending", "confirmed"])
+    ).all()
+
+    # 3. Define Salon Operating Hours
+    open_time = time(9, 0)
+    close_time = time(17, 0) # 5:00 PM
+
+    # 4. Determine required duration
+    duration_minutes = 120 # Default duration
+    if service_id:
+        service = db.query(Service).filter(Service.id == service_id).first()
+        if service:
+            duration_minutes = service.duration_minutes
+
+    available_slots = []
+    
+    # We use datetime combination to easily add timedelta minutes
+    current_dt = datetime.combine(target_date, open_time)
+    end_dt = datetime.combine(target_date, close_time)
+
+    # 5. Generate slots in 30-minute intervals
+    while current_dt + timedelta(minutes=duration_minutes) <= end_dt:
+        slot_start = current_dt.time()
+        slot_end = (current_dt + timedelta(minutes=duration_minutes)).time()
+
+        # Check for overlaps with existing bookings
+        overlap = False
+        for b in existing_bookings:
+            # Overlap formula: Max(start1, start2) < Min(end1, end2)
+            if max(slot_start, b.start_time) < min(slot_end, b.end_time):
+                overlap = True
+                break
+
+        # Also, check if the slot is in the past (if the target_date is today)
+        if target_date == datetime.now().date() and slot_start < datetime.now().time():
+            overlap = True
+
+        if not overlap:
+            # Format time nicely, e.g., "09:00", "13:30"
+            available_slots.append(slot_start.strftime("%H:%M"))
+
+        # Move forward by 30 minutes to check the next possible start time
+        current_dt += timedelta(minutes=30) 
+
+    return available_slots
 
 def block_date(db: Session, block_in: BlockedDateCreate):
     """Block a specific date so customers cannot book it."""
