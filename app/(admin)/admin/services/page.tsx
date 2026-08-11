@@ -143,7 +143,7 @@ export default function AdminServicesPage() {
                   id: `svc_${Date.now()}`,
                   long_description: form.description,
                   what_to_expect: [],
-                  image_url: '/images/services/wash-and-set.webp',
+                  image_url: '/images/services/wash-and-blow-dry.webp',
                   is_active: true,
                 },
               ])

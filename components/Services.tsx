@@ -1,6 +1,6 @@
-import Image from 'next/image'
 import Link from 'next/link'
 import { Clock, ArrowRight } from 'lucide-react'
+import ServiceImage from '@/components/ServiceImage'
 import TiltCard from '@/components/animations/TiltCard'
 import RevealOnScroll from '@/components/animations/RevealOnScroll'
 import { getServices, SERVICE_WIDE_IMAGE } from '@/lib/data'
@@ -24,18 +24,19 @@ export default async function Services() {
           </div>
         </RevealOnScroll>
 
-        <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {services.map((service, i) => (
             <RevealOnScroll as="li" key={service.id} index={i} className="h-full">
               <TiltCard maxTilt={4} className="h-full">
                 <article className="tilt-card flex h-full flex-col overflow-hidden rounded-2xl bg-surface-container-lowest">
                   <div className="relative aspect-[3/4] overflow-hidden">
-                    <Image
+                    <ServiceImage
+                      slug={service.slug}
                       src={SERVICE_WIDE_IMAGE[service.slug] ?? service.image_url}
-                      alt={`${service.name} service at Pholar Natural`}
-                      fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1280px) 33vw, 20vw"
-                      className="object-cover transition-transform duration-500 hover:scale-105"
+                      alt={`${service.name} at Pholar Natural`}
+                      variant="tall"
+                      sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, (max-width: 1280px) 30vw, 24vw"
+                      className="object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" aria-hidden="true" />
                     <h3 className="absolute inset-x-4 bottom-4 font-headline-md text-body-lg text-white">

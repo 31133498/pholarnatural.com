@@ -50,7 +50,9 @@ The exports are static HTML aimed at a browser, not a Next app. Every port must:
 - Currency **CAD** everywhere. Free shipping over **CAD $50**. Surface "All prices in CAD".
 - 2 products: Restorative Hair Oil (CAD $25.00), Botanical Cleanse Shampoo (CAD $20.00).
   Variants are weight/size (30ml, 100ml, 250ml, 500ml).
-- 5 services: Didi Olowo, Kiko, Wash & Set, Hair Treatment, Hair Waxing.
+- 7 services: French Braids, Cornrows, Cornrow Mix Twist, Natural Twist, Wash and Blow Dry,
+  Hair Treatment, Hair Waxing. (Client revised the list on 11 Aug 2026; Didi Olowo and Kiko
+  were removed. Prices and durations for the new ones are placeholders pending her sign-off.)
 - Booking: Mon–Sat only (Sundays disabled), 10:00–17:00, 60-min slots at 10/11/12/13/14/15/16,
   **10% deposit**. Flow: service → date → time → deposit → confirmation.
 - Cancellation: full refund within 30 min; deposit forfeited within 24h of appointment. The

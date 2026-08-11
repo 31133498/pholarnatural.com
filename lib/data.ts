@@ -91,64 +91,104 @@ export const PRODUCT_CARD_IMAGE: Record<string, string> = {
 /* ------------------------------------------------------------------ services */
 
 /**
- * Prices are CAD (doc §7 fixes the currency). The Stitch booking screen priced these in Naira
- * (₦15,000 / ₦12,000 / ₦8,000 / ₦20,000 / ₦10,000); that ladder is preserved here, converted to
- * CAD. The absolute figures are the developer's placeholder and are pending client sign-off —
- * this array is the single place to correct them.
+ * The seven services the client confirmed: Didi Olowo and Kiko removed, French Braids replacing
+ * Didi Olowo, Wash and Blow Dry replacing Wash & Set, and Cornrows, Cornrow Mix Twist and
+ * Natural Twist added.
+ *
+ * PRICES AND DURATIONS ARE PLACEHOLDERS. The client has not supplied figures for the new or
+ * renamed services, so these carry over the previous CAD ladder and are estimated from how long
+ * each style actually takes. Every one needs her sign-off before launch — this array is the
+ * single place to correct them.
  */
 export const SERVICES: Service[] = [
   {
-    id: 'svc_didi_olowo',
-    name: 'Didi Olowo',
-    slug: 'didi-olowo',
-    description: 'Traditional inverted braiding technique that promotes hair growth and scalp health.',
+    id: 'svc_french_braids',
+    name: 'French Braids',
+    slug: 'french-braids',
+    description: 'Classic plaited braids worked over the scalp, protective and neat enough to last.',
     long_description:
-      'Didi Olowo is an inverted cornrow braided flat against the scalp, worked in the direction that encourages circulation at the root. It is one of the oldest protective styles in West African hairdressing and remains one of the kindest to fragile hairlines.',
+      'French braids plait each section over the strand beneath it, so the braid sits raised along the scalp. Worked on natural hair it keeps tension even along the parting, which makes it one of the gentler protective styles on a fragile hairline.',
     what_to_expect: [
-      'A scalp and tension assessment before any braiding begins',
-      'Cleansing and light conditioning if your hair has product build-up',
-      'Sectioning and inverted braiding, worked in the direction of growth',
+      'A scalp and tension check before any braiding begins',
+      'Cleansing and light conditioning if there is product build-up',
+      'Sectioning and plaiting, worked in the direction of growth',
       'A finishing oil along the parting to settle the scalp',
     ],
     duration_minutes: 180,
     price_cents: 12_000,
-    image_url: '/images/services/didi-olowo.webp',
+    image_url: '/images/services/french-braids.webp',
     is_active: true,
   },
   {
-    id: 'svc_kiko',
-    name: 'Kiko',
-    slug: 'kiko',
-    description: 'Artistic hair threading that provides stretch and protection without heat damage.',
+    id: 'svc_cornrows',
+    name: 'Cornrows',
+    slug: 'cornrows',
+    description: 'Traditional braids laid flat to the scalp in clean, even rows.',
     long_description:
-      'Kiko uses thread wrapped along sectioned hair to stretch and elongate the strand without a single degree of heat. It is the traditional alternative to blow-drying, and it doubles as a sculptural style in its own right.',
+      'Cornrows are plaited under rather than over, so the braid lies flat against the scalp. Straight-back or patterned, they are among the longest-wearing protective styles and the foundation most other braided looks are built on.',
     what_to_expect: [
-      'Consultation on length retention goals and the finish you want',
-      'Sectioning and threading, wrapped to your preferred tension',
-      'Optional patterning across the crown',
-      'Guidance on sleeping in the style so it lasts',
+      'Consultation on the parting pattern you want',
+      'Cleansing and stretching so the rows sit evenly',
+      'Sectioning and braiding flat to the scalp',
+      'Scalp oil and guidance on keeping the rows clean',
+    ],
+    duration_minutes: 180,
+    price_cents: 10_000,
+    image_url: '/images/services/cornrows.webp',
+    is_active: true,
+  },
+  {
+    id: 'svc_cornrow_mix_twist',
+    name: 'Cornrow Mix Twist',
+    slug: 'cornrow-mix-twist',
+    description: 'Cornrows combined with twisted sections for a patterned, textured finish.',
+    long_description:
+      'A combination style: cornrows laid flat through part of the head with two-strand twists worked through the rest. It gives the staying power of cornrows with the softer movement of twists, and the balance between the two is set to whatever suits your head shape.',
+    what_to_expect: [
+      'Design consultation to agree where rows end and twists begin',
+      'Cleansing and stretching',
+      'Cornrow sections braided flat, twisted sections worked separately',
+      'Finishing oil and aftercare guidance',
+    ],
+    duration_minutes: 240,
+    price_cents: 13_000,
+    image_url: '/images/services/cornrow-mix-twist.webp',
+    is_active: true,
+  },
+  {
+    id: 'svc_natural_twist',
+    name: 'Natural Twist',
+    slug: 'natural-twist',
+    description: 'Two-strand twists that define texture and protect length, with no heat.',
+    long_description:
+      'Two strands wound around each other along the length of each section. Twists define natural curl pattern without a single degree of heat, and they can be worn as they are or unravelled for a twist-out.',
+    what_to_expect: [
+      'Consultation on twist size and the finish you want',
+      'Cleansing and moisturising so each section holds',
+      'Sectioning and twisting throughout',
+      'Guidance on sleeping in them and on unravelling for a twist-out',
     ],
     duration_minutes: 120,
-    price_cents: 9_500,
-    image_url: '/images/services/kiko.webp',
+    price_cents: 9_000,
+    image_url: '/images/services/natural-twist.webp',
     is_active: true,
   },
   {
-    id: 'svc_wash_set',
-    name: 'Wash & Set',
-    slug: 'wash-and-set',
-    description: 'Deep botanical cleansing followed by a restorative moisture-lock setting.',
+    id: 'svc_wash_blow_dry',
+    name: 'Wash and Blow Dry',
+    slug: 'wash-and-blow-dry',
+    description: 'Deep botanical cleanse followed by a smooth, controlled blow dry.',
     long_description:
-      'A full cleanse with the Botanical Cleanse Shampoo, followed by a moisture-sealing set. The service is built around our own products, so it is a good way to find out how your hair responds to them before buying.',
+      'A full cleanse with the Botanical Cleanse Shampoo, then a blow dry that stretches and smooths without scorching the strand. The service is built around our own products, so it is a good way to find out how your hair responds to them before buying.',
     what_to_expect: [
       'Double cleanse with the Botanical Cleanse Shampoo',
       'Scalp massage through the second lather',
-      'Moisture-lock treatment and sectioned setting',
-      'Finish with the Restorative Hair Oil',
+      'Moisture-lock treatment before any heat',
+      'Sectioned blow dry with a heat protectant, finished with the Restorative Hair Oil',
     ],
     duration_minutes: 60,
     price_cents: 6_500,
-    image_url: '/images/services/wash-and-set.webp',
+    image_url: '/images/services/wash-and-blow-dry.webp',
     is_active: true,
   },
   {
@@ -191,11 +231,34 @@ export const SERVICES: Service[] = [
 
 /** Wider crops used on the homepage services strip. */
 export const SERVICE_WIDE_IMAGE: Record<string, string> = {
-  'didi-olowo': '/images/services/didi-olowo-wide.webp',
-  kiko: '/images/services/kiko-wide.webp',
-  'wash-and-set': '/images/services/wash-and-set-wide.webp',
+  'french-braids': '/images/services/french-braids-wide.webp',
+  cornrows: '/images/services/cornrows-wide.webp',
+  'cornrow-mix-twist': '/images/services/cornrow-mix-twist-wide.webp',
+  'natural-twist': '/images/services/natural-twist-wide.webp',
+  'wash-and-blow-dry': '/images/services/wash-and-blow-dry-wide.webp',
   'hair-treatment': '/images/services/hair-treatment-wide.webp',
   'hair-waxing': '/images/services/hair-waxing-wide.webp',
+}
+
+/**
+ * Services the client supplied more than one photo for. Any slug listed here renders as a
+ * sliding carousel instead of a still image; everything else falls back to `image_url`.
+ *
+ * Frontend-only for now: the backend `services` table carries a single `image_url`, so when the
+ * API takes over this becomes a `service_images` join in the same shape as `product_images`.
+ */
+export const SERVICE_GALLERY: Record<string, { card: string[]; tall: string[] }> = {
+  'wash-and-blow-dry': {
+    card: ['/images/services/wash-and-blow-dry.webp', '/images/services/wash-and-blow-dry-2.webp'],
+    tall: [
+      '/images/services/wash-and-blow-dry-wide.webp',
+      '/images/services/wash-and-blow-dry-2-wide.webp',
+    ],
+  },
+  'hair-treatment': {
+    card: ['/images/services/hair-treatment.webp', '/images/services/hair-treatment-2.webp'],
+    tall: ['/images/services/hair-treatment-wide.webp', '/images/services/hair-treatment-2-wide.webp'],
+  },
 }
 
 /* ------------------------------------------------------------------ testimonials */
@@ -227,7 +290,7 @@ export const TESTIMONIALS: Testimonial[] = [
     id: 't3',
     name: 'Fatima L.',
     role: 'Loyal Client',
-    quote: "The Didi Olowo service was handled with so much care. I've never felt more connected to my roots.",
+    quote: "The cornrows were handled with so much care. I've never felt more connected to my roots.",
     image_url: '/images/testimonials/fatima.webp',
   },
 ]
@@ -247,10 +310,10 @@ export const BLOCKED_DATES: BlockedDate[] = [
 ]
 
 export const BOOKINGS: Booking[] = [
-  { id: 'bk_1', reference: 'PN-B-4821', service_id: 'svc_didi_olowo', customer_name: 'Adaeze Okafor', customer_email: 'adaeze@example.com', customer_phone: '+1 416 555 0111', booking_date: todayPlus(0), start_time: '10:00', end_time: '13:00', status: 'confirmed', deposit_cents: 1_200, stripe_payment_intent_id: 'pi_mock_4821', cancellation_reason: null, created_at: '2026-08-05T12:04:00Z' },
-  { id: 'bk_2', reference: 'PN-B-4822', service_id: 'svc_wash_set', customer_name: 'Lena Petrova', customer_email: 'lena@example.com', customer_phone: null, booking_date: todayPlus(0), start_time: '14:00', end_time: '15:00', status: 'confirmed', deposit_cents: 650, stripe_payment_intent_id: 'pi_mock_4822', cancellation_reason: null, created_at: '2026-08-06T09:22:00Z' },
+  { id: 'bk_1', reference: 'PN-B-4821', service_id: 'svc_french_braids', customer_name: 'Adaeze Okafor', customer_email: 'adaeze@example.com', customer_phone: '+1 416 555 0111', booking_date: todayPlus(0), start_time: '10:00', end_time: '13:00', status: 'confirmed', deposit_cents: 1_200, stripe_payment_intent_id: 'pi_mock_4821', cancellation_reason: null, created_at: '2026-08-05T12:04:00Z' },
+  { id: 'bk_2', reference: 'PN-B-4822', service_id: 'svc_wash_blow_dry', customer_name: 'Lena Petrova', customer_email: 'lena@example.com', customer_phone: null, booking_date: todayPlus(0), start_time: '14:00', end_time: '15:00', status: 'confirmed', deposit_cents: 650, stripe_payment_intent_id: 'pi_mock_4822', cancellation_reason: null, created_at: '2026-08-06T09:22:00Z' },
   { id: 'bk_3', reference: 'PN-B-4823', service_id: 'svc_hair_treatment', customer_name: 'Marcus Bell', customer_email: 'marcus@example.com', customer_phone: '+1 647 555 0193', booking_date: todayPlus(1), start_time: '11:00', end_time: '12:30', status: 'pending', deposit_cents: 1_600, stripe_payment_intent_id: 'pi_mock_4823', cancellation_reason: null, created_at: '2026-08-08T17:41:00Z' },
-  { id: 'bk_4', reference: 'PN-B-4824', service_id: 'svc_kiko', customer_name: 'Priya Raman', customer_email: 'priya@example.com', customer_phone: '+1 905 555 0164', booking_date: todayPlus(2), start_time: '15:00', end_time: '17:00', status: 'confirmed', deposit_cents: 950, stripe_payment_intent_id: 'pi_mock_4824', cancellation_reason: null, created_at: '2026-08-09T11:15:00Z' },
+  { id: 'bk_4', reference: 'PN-B-4824', service_id: 'svc_cornrows', customer_name: 'Priya Raman', customer_email: 'priya@example.com', customer_phone: '+1 905 555 0164', booking_date: todayPlus(2), start_time: '15:00', end_time: '17:00', status: 'confirmed', deposit_cents: 950, stripe_payment_intent_id: 'pi_mock_4824', cancellation_reason: null, created_at: '2026-08-09T11:15:00Z' },
   { id: 'bk_5', reference: 'PN-B-4820', service_id: 'svc_hair_waxing', customer_name: 'Tolu Adeyemi', customer_email: 'tolu@example.com', customer_phone: null, booking_date: todayPlus(-3), start_time: '16:00', end_time: '16:45', status: 'cancelled', deposit_cents: 800, stripe_payment_intent_id: 'pi_mock_4820', cancellation_reason: 'Customer rescheduled', created_at: '2026-08-02T14:30:00Z' },
 ]
 
@@ -377,7 +440,7 @@ export interface Slot {
  * Availability for one date, mirroring `GET /api/bookings/slots?date=`.
  *
  * A booking occupies every hourly slot its duration spans, not just its start hour — a 180-minute
- * Didi Olowo at 10:00 blocks 10:00, 11:00 and 12:00. Slots that cannot fit the requested service
+ * French Braids at 10:00 blocks 10:00, 11:00 and 12:00. Slots that cannot fit the requested service
  * before the 17:00 close are returned as `too-late`.
  */
 export async function getAvailableSlots(date: string, serviceId?: string): Promise<Slot[]> {

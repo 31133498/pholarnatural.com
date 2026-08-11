@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
-import Image from 'next/image'
 import Link from 'next/link'
 import { Clock, ArrowRight, CalendarDays } from 'lucide-react'
+import ServiceImage from '@/components/ServiceImage'
 import Accordion from '@/components/Accordion'
 import RevealOnScroll from '@/components/animations/RevealOnScroll'
 import { getServices } from '@/lib/data'
@@ -11,7 +11,7 @@ import { SITE_URL, CURRENCY, BUSINESS, DEPOSIT_RATE } from '@/lib/config'
 export const metadata: Metadata = {
   title: 'Services',
   description:
-    'Didi Olowo, Kiko, Wash & Set, Hair Treatment and Hair Waxing — professional beauty treatments rooted in African tradition. Book online with a 10% deposit. All prices in CAD.',
+    'French Braids, Cornrows, Cornrow Mix Twist, Natural Twist, Wash and Blow Dry, Hair Treatment and Hair Waxing — professional beauty treatments rooted in African tradition. Book online with a 10% deposit. All prices in CAD.',
   alternates: { canonical: '/services' },
   openGraph: {
     title: 'Services | Pholar Natural',
@@ -71,12 +71,14 @@ export default async function ServicesPage() {
               className="flex h-full scroll-mt-28 flex-col overflow-hidden rounded-3xl border border-outline-variant bg-surface-container-lowest"
             >
               <div className="relative aspect-[4/3] overflow-hidden">
-                <Image
+                <ServiceImage
+                  slug={service.slug}
                   src={service.image_url}
-                  alt={`${service.name} being performed at Pholar Natural`}
-                  fill
+                  alt={`${service.name} at Pholar Natural`}
+                  variant="card"
                   sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
                   className="object-cover"
+                  priority={i < 2}
                 />
               </div>
 

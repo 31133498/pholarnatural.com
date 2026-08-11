@@ -6,7 +6,7 @@ import { getServices, getBlockedDates } from '@/lib/data'
 export const metadata: Metadata = {
   title: 'Book an Appointment',
   description:
-    'Book a Didi Olowo, Kiko, Wash & Set, Hair Treatment or Hair Waxing appointment at Pholar Natural. Monday to Saturday, 10:00 AM to 5:00 PM, held with a 10% deposit.',
+    'Book French Braids, Cornrows, Cornrow Mix Twist, Natural Twist, Wash and Blow Dry, Hair Treatment or Hair Waxing at Pholar Natural. Monday to Saturday, 10:00 AM to 5:00 PM, held with a 10% deposit.',
   alternates: { canonical: '/book' },
   openGraph: {
     title: 'Book an Appointment | Pholar Natural',

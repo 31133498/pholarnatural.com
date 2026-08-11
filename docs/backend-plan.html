@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pholar Natural — Backend: Ten Things to Ship</title>
+<style>
+  :root{
+    --ground:#fcf9f2; --card:#fff; --card2:#f6f3ec;
+    --ink:#1c1c18; --muted:#434843; --faint:#737872;
+    --line:#c3c8c1; --sage:#334537; --bronze:#7d562d; --ok:#334537;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#191b16; --card:#21241d; --card2:#2a2e26;
+      --ink:#f3f0ea; --muted:#c3c8c1; --faint:#8d938a;
+      --line:#3a3f37; --sage:#b7ccb9; --bronze:#f0bd8b; --ok:#b7ccb9;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:2rem 1.25rem 5rem;background:var(--ground);color:var(--ink);
+       font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif}
+  .wrap{max-width:58rem;margin:0 auto}
+  h1{font-family:Georgia,'Times New Roman',serif;font-size:2rem;margin:0 0 .25rem;
+     color:var(--sage);text-wrap:balance}
+  h2{font-family:Georgia,serif;font-size:1.2rem;margin:0;color:var(--sage)}
+  h3{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);
+     margin:1.25rem 0 .4rem}
+  .sub{color:var(--muted);margin:0 0 1.75rem}
+  code{background:var(--card2);padding:.1em .4em;border-radius:3px;font-size:.87em;
+       font-family:ui-monospace,'Cascadia Code',Consolas,monospace}
+
+  .bar{position:sticky;top:0;z-index:5;background:var(--ground);padding:.75rem 0;
+       border-bottom:1px solid var(--line);margin-bottom:1.5rem;
+       display:flex;gap:1rem;align-items:center;flex-wrap:wrap}
+  .track{flex:1;min-width:11rem;height:8px;background:var(--card2);border-radius:99px;overflow:hidden}
+  .fill{height:100%;background:var(--sage);width:0;transition:width .2s}
+  .count{font-variant-numeric:tabular-nums;font-size:.87rem;color:var(--muted);white-space:nowrap}
+  button{font:inherit;font-size:.8rem;padding:.35rem .8rem;border:1px solid var(--line);
+         background:var(--card);color:var(--muted);border-radius:99px;cursor:pointer}
+  button:hover{border-color:var(--sage);color:var(--sage)}
+  button:focus-visible{outline:2px solid var(--sage);outline-offset:2px}
+
+  .phase{background:var(--card);border:1px solid var(--line);border-radius:10px;
+         margin-bottom:.85rem;overflow:hidden}
+  .phase>summary{padding:1rem 1.25rem;cursor:pointer;display:flex;gap:.85rem;
+                 align-items:baseline;list-style:none}
+  .phase>summary::-webkit-details-marker{display:none}
+  .phase>summary:hover{background:var(--card2)}
+  .num{font-variant-numeric:tabular-nums;font-weight:700;color:var(--bronze);min-width:1.7rem}
+  .ptitle{flex:1}
+  .pmeta{font-size:.78rem;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .body{padding:0 1.25rem 1.25rem;border-top:1px solid var(--line)}
+  .goal{color:var(--muted);margin:1rem 0 0}
+
+  ul{list-style:none;padding:0;margin:.4rem 0 0}
+  li{display:flex;gap:.7rem;align-items:flex-start;padding:.4rem 0;border-bottom:1px solid var(--line)}
+  li:last-child{border-bottom:0}
+  input[type=checkbox]{margin-top:.28rem;width:1.05rem;height:1.05rem;flex:0 0 auto;
+                       accent-color:var(--sage);cursor:pointer}
+  input:focus-visible{outline:2px solid var(--sage);outline-offset:2px}
+  label{cursor:pointer;flex:1}
+  li.done label{opacity:.5;text-decoration:line-through}
+
+  .verify{background:var(--card2);border-radius:8px;padding:.75rem 1rem;margin-top:1rem}
+  .verify h3{margin-top:0}
+  .handover{margin-top:1rem;padding-top:.75rem;border-top:1px dashed var(--line);
+            color:var(--muted);font-size:.93rem}
+  .handover strong{color:var(--sage)}
+  footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);
+         color:var(--faint);font-size:.85rem}
+  @media print{
+    body{padding:0}.bar,button{display:none}
+    .phase{break-inside:avoid;border:1px solid #999}
+    .phase>.body{display:block !important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Backend — ten things to ship</h1>
+<p class="sub">Everything that has to be true before Pholar Natural is a fully working application you can hand to the client. Ticks save in this browser.</p>
+
+<div class="bar">
+  <div class="track"><div class="fill" id="fill"></div></div>
+  <span class="count" id="count">0 / 0</span>
+  <button id="expand">Expand all</button>
+  <button id="reset">Reset ticks</button>
+</div>
+
+<div id="phases"></div>
+
+<footer>
+  <code>docs/backend-plan.html</code> — ticks are stored in this browser only, not in git.
+</footer>
+
+</div>
+
+<script>
+const PHASES = [
+{
+  n:1, title:"Connect the two halves", tag:"Foundation",
+  goal:"The frontend can reach the API and read real data from Postgres. Nothing user-facing changes yet.",
+  tasks:[
+    "Agree one API base path and make the frontend, backend and doc all use it",
+    "Lock CORS to the real frontend origins instead of a wildcard",
+    "Set <code>NEXT_PUBLIC_API_URL</code> locally and document every backend env var in an example file",
+    "Write one shared fetch wrapper in <code>lib/api.ts</code> — base URL, JSON, error handling, in a single place",
+    "Run the migrations against Postgres and confirm the tables match the models",
+    "Seed the database: 2 products with variants, 5 services, default admin settings",
+    "Stop committing compiled Python — add <code>__pycache__</code> and <code>*.pyc</code> to <code>.gitignore</code>"
+  ],
+  checks:[
+    "The API starts clean and <code>/docs</code> lists every route",
+    "Requesting products returns the seeded records with variants nested",
+    "A browser request from the frontend origin succeeds with no CORS error"
+  ],
+  handover:"The API is reachable, seeded, and configured per environment."
+},
+{
+  n:2, title:"Put the real catalog on the site", tag:"Customer",
+  goal:"Every product and service the customer sees comes from the database.",
+  tasks:[
+    "Serve <code>/shop</code>, both product pages and <code>/services</code> from the API",
+    "Handle database UUIDs in place of the placeholder ids",
+    "Build the product pages from slugs fetched at build time",
+    "Choose a caching strategy per page — stock levels argue against fully static product pages",
+    "Add loading and error states now that these pages depend on a network call",
+    "Remove the hardcoded product and service arrays once nothing imports them"
+  ],
+  checks:[
+    "Search, category filter and sort still work against real data",
+    "Variant switching changes the price, and stock badges reflect real stock",
+    "Prices show in CAD everywhere, still driven by integer cents",
+    "With the API stopped, pages show an error state rather than crashing",
+    "Product structured data still validates in Google's Rich Results Test"
+  ],
+  handover:"The client can change a price or a description and see it live on the site."
+},
+{
+  n:3, title:"Make booking real", tag:"Customer",
+  goal:"The calendar shows true availability and a booking is genuinely held.",
+  tasks:[
+    "Drive the calendar from real availability and real blocked dates",
+    "Write bookings through the API and use the reference it returns",
+    "Make slot occupancy agree on both sides — a three-hour service must consume three hourly slots everywhere",
+    "Read the confirmation back from the API rather than browser storage",
+    "Handle two people racing for the same slot",
+    "Support cancelling a booking from the customer side"
+  ],
+  checks:[
+    "Sundays and blocked dates cannot be selected",
+    "Booking a long service removes the hours it occupies for the next visitor",
+    "Slots too late to finish before closing are shown unavailable",
+    "The booking appears in the database with correct start and end times",
+    "Two browsers racing for one slot: one wins, the other gets a clear message"
+  ],
+  handover:"A customer can book an appointment and the studio can trust the calendar."
+},
+{
+  n:4, title:"Make checkout real", tag:"Customer",
+  goal:"A completed checkout produces a genuine order, priced by the server.",
+  tasks:[
+    "Create orders through the API and read the confirmation back from it",
+    "Check stock server-side at the moment the order is placed",
+    "Recalculate prices, shipping and totals on the server — treat everything from the browser as untrusted",
+    "Store only variant ids and quantities in the cart, never prices",
+    "Add discount code entry and validation at checkout"
+  ],
+  checks:[
+    "An order writes correct rows and correct cents to the database",
+    "Ordering more than available stock is refused with a readable message",
+    "Editing prices in devtools before submitting changes nothing about what is charged",
+    "Free shipping applies over CAD $50 and the flat rate below it",
+    "The confirmation page survives a refresh"
+  ],
+  handover:"A guest can complete a purchase and the order is correct and trustworthy."
+},
+{
+  n:5, title:"Give the admin real access", tag:"Admin",
+  goal:"The dashboard stops being a demo and becomes a protected area.",
+  tasks:[
+    "Authenticate against the API and delete the browser-side passphrase check",
+    "Hold the session in an httpOnly, Secure, SameSite cookie — never in localStorage",
+    "Block unauthenticated requests before any admin page is rendered",
+    "Support signing out",
+    "Decide whether admin registration stays open in production or is closed after seeding",
+    "Remove the \"demo gate, not real security\" banners and the printed passphrase",
+    "Send expired sessions back to the login screen rather than failing silently"
+  ],
+  checks:[
+    "Visiting the dashboard while logged out redirects before any admin content is sent",
+    "The session cookie cannot be read from JavaScript",
+    "A wrong password gives one generic failure that does not reveal whether the account exists",
+    "Calling an admin endpoint directly without a session returns 401",
+    "Signing out clears the session and the back button does not restore the dashboard"
+  ],
+  handover:"The admin area is genuinely protected and the honesty banners are no longer true."
+},
+{
+  n:6, title:"Let the client run their own catalog and services", tag:"Admin",
+  goal:"She adds a service in the admin, sets its price and duration there, and the public site updates itself — no deploy, no developer, no code change. Same for products. This is the phase that decides whether she owns the site or depends on us forever.",
+  tasks:[
+    "Persist service create, edit and delete — name, description, duration, price, active state",
+    "Upload a service photo from the service form itself, not just product images",
+    "Make a new service appear automatically on the services page, the homepage strip and the booking flow",
+    "Drive the deposit from the price she sets, so changing a price changes what is charged",
+    "Let her control the display order of services rather than relying on creation order",
+    "Handle renaming safely — a changed name changes the URL, so keep old links working",
+    "Persist product create, edit and delete",
+    "Persist variant add, edit and delete, including price and stock",
+    "Replace the image upload placeholder with real uploads to storage",
+    "Support reordering product images",
+    "Count services on the homepage from real data instead of the hardcoded figure",
+    "Enforce server-side that a service with future bookings cannot be deleted",
+    "List drafts and inactive items in the admin, not only the live ones"
+  ],
+  checks:[
+    "Adding a service in the admin puts it on the public services page with no deploy",
+    "That same new service is immediately bookable in the booking flow",
+    "Changing a service price updates the services page, the pricing table and the deposit charged",
+    "Changing a duration changes how many time slots that service consumes",
+    "An uploaded service photo appears on the public site at the right crop",
+    "Setting a service inactive removes it from the customer site but keeps it in the admin",
+    "The homepage service count matches the real number of active services",
+    "A new product appears on the shop after a refresh",
+    "Changing a variant price changes what the product page and cart charge",
+    "Deleting a service with upcoming bookings is refused by the API, not just hidden in the UI"
+  ],
+  handover:"She can add a service, price it, photograph it and put it live herself — and add a product the same way. Nothing on the menu needs a developer again."
+},
+{
+  n:7, title:"Let the client run their day", tag:"Admin",
+  goal:"Bookings, orders and discounts are managed from the dashboard.",
+  tasks:[
+    "Load bookings into the calendar and the table from the API",
+    "Persist confirming and cancelling a booking, with the cancellation reason",
+    "Persist blocking and unblocking dates",
+    "Load orders and order detail from the API",
+    "Persist the order status pipeline through to delivered",
+    "Persist discount create, edit and delete",
+    "Serve the dashboard figures from the API instead of computing them in the browser"
+  ],
+  checks:[
+    "Confirming a booking survives a refresh",
+    "A cancellation stores its reason and shows it in the table",
+    "Blocking a date immediately removes it from the customer calendar",
+    "Each step of the order pipeline persists",
+    "Dashboard numbers match what is actually in the database"
+  ],
+  handover:"The client can run a full day of business from the dashboard alone."
+},
+{
+  n:8, title:"Close the loop with customers", tag:"Admin",
+  goal:"Messages reach the studio and studio settings actually take effect.",
+  tasks:[
+    "Store contact form submissions instead of only showing a success message",
+    "Build an admin screen for reading messages and marking them read",
+    "Save and load the notification settings the settings page collects",
+    "Add test-send buttons that prove the notification channels are configured",
+    "Make business hours in settings drive the customer slot grid",
+    "Rate limit the contact form"
+  ],
+  checks:[
+    "Submitting the contact form stores a message and it appears in the admin",
+    "Marking a message read persists",
+    "Changing business hours changes which slots customers are offered",
+    "Repeated rapid submissions of the contact form are throttled"
+  ],
+  handover:"Nothing a customer sends disappears, and the settings screen is not decorative."
+},
+{
+  n:9, title:"Take payment", tag:"Payment",
+  goal:"Money moves — in test mode until the client's Stripe account is live.",
+  tasks:[
+    "Replace the checkout placeholder with the real Stripe payment form",
+    "Replace the booking deposit placeholder with the real payment form",
+    "Create payment intents server-side, for amounts the server calculates",
+    "Verify webhook signatures before trusting any webhook",
+    "Mark orders and bookings paid from webhook events",
+    "Make webhook handling idempotent — Stripe retries, and double-crediting is a real bug",
+    "Refund cancellations that fall inside the full-refund window",
+    "Confirm the outstanding middle cancellation window with the client and set it in config",
+    "Give declines and 3D Secure a retry path instead of a dead end"
+  ],
+  checks:[
+    "A test card completes an order and the webhook marks it paid",
+    "A declining card shows a readable error and the cart survives",
+    "A 3D Secure card completes its challenge",
+    "Replaying the same webhook twice does not double-credit",
+    "A booking cancelled inside the window is refunded in Stripe",
+    "Closing the tab mid-payment does not strand a paid order as unconfirmed"
+  ],
+  handover:"A real card buys a product and holds an appointment, end to end."
+},
+{
+  n:10, title:"Go live and hand over", tag:"Launch",
+  goal:"Everything between working software and a site the client owns.",
+  tasks:[
+    "Order confirmation email to the customer",
+    "Booking confirmation email including the cancellation policy",
+    "Admin notification on every order and booking",
+    "Branded email templates in the Pholar palette",
+    "WhatsApp notifications that honour the admin toggle",
+    "Provision the server: reverse proxy, process manager, SSL",
+    "Point the domain and set production environment variables",
+    "Set the real site URL so sitemap, robots and social previews stop using the placeholder",
+    "Nightly database backups with retention",
+    "Switch Stripe to live keys and verify one real transaction",
+    "Cross-browser and real-device testing, including iOS Safari",
+    "Performance pass against the Core Web Vitals targets",
+    "Record the Stripe walkthrough for the client",
+    "Walk the client through the admin and hand over credentials"
+  ],
+  checks:[
+    "An order sends both the customer email and the admin copy",
+    "A booking confirmation carries the right date, time and deposit",
+    "Turning WhatsApp off in settings actually stops the messages",
+    "The site serves over HTTPS on the real domain with a valid certificate",
+    "A restored backup produces a working database",
+    "A full purchase and a full booking complete on a real phone on cellular data"
+  ],
+  handover:"The client has the keys, the training and a site that works without you."
+}
+];
+
+const KEY="pholar-backend-ten-v1";
+let state={};
+try{state=JSON.parse(localStorage.getItem(KEY)||"{}")}catch{state={}}
+
+const host=document.getElementById("phases");
+host.innerHTML=PHASES.map(p=>`
+  <details class="phase" id="p${p.n}">
+    <summary>
+      <span class="num">${String(p.n).padStart(2,"0")}</span>
+      <span class="ptitle"><h2>${p.title}</h2></span>
+      <span class="pmeta" data-meta="${p.n}"></span>
+    </summary>
+    <div class="body">
+      <p class="goal">${p.goal}</p>
+      <h3>Do</h3>
+      <ul>${p.tasks.map((t,i)=>row(`${p.n}.d.${i}`,t)).join("")}</ul>
+      <div class="verify">
+        <h3>Confirm it works</h3>
+        <ul>${p.checks.map((t,i)=>row(`${p.n}.c.${i}`,t)).join("")}</ul>
+      </div>
+      <p class="handover"><strong>Tick this off when:</strong> ${p.handover}</p>
+    </div>
+  </details>`).join("");
+
+function row(id,text){
+  return `<li class="${state[id]?"done":""}">
+    <input type="checkbox" id="${id}" ${state[id]?"checked":""}>
+    <label for="${id}">${text}</label></li>`;
+}
+
+function refresh(){
+  const boxes=[...document.querySelectorAll('input[type=checkbox]')];
+  const done=boxes.filter(b=>b.checked).length;
+  document.getElementById("count").textContent=`${done} / ${boxes.length}`;
+  document.getElementById("fill").style.width=boxes.length?(done/boxes.length*100)+"%":"0";
+  PHASES.forEach(p=>{
+    const own=boxes.filter(b=>b.id.startsWith(p.n+"."));
+    const d=own.filter(b=>b.checked).length;
+    const el=document.querySelector(`[data-meta="${p.n}"]`);
+    el.textContent=`${p.tag} · ${d}/${own.length}`;
+    el.style.color=(own.length&&d===own.length)?"var(--ok)":"";
+  });
+}
+
+host.addEventListener("change",e=>{
+  if(e.target.type!=="checkbox")return;
+  state[e.target.id]=e.target.checked;
+  e.target.closest("li").classList.toggle("done",e.target.checked);
+  localStorage.setItem(KEY,JSON.stringify(state));
+  refresh();
+});
+
+document.getElementById("reset").addEventListener("click",()=>{
+  if(!confirm("Clear every tick?"))return;
+  state={};localStorage.removeItem(KEY);
+  document.querySelectorAll('input[type=checkbox]').forEach(b=>{
+    b.checked=false;b.closest("li").classList.remove("done")});
+  refresh();
+});
+
+const eb=document.getElementById("expand");
+eb.addEventListener("click",()=>{
+  const all=[...document.querySelectorAll(".phase")];
+  const open=all.every(d=>d.open);
+  all.forEach(d=>d.open=!open);
+  eb.textContent=open?"Expand all":"Collapse all";
+});
+
+document.getElementById("p1").open=true;
+refresh();
+</script>
+</body>
+</html>

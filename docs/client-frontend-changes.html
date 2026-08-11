@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Client Feedback — Frontend Changes</title>
+<style>
+  :root{
+    --ground:#fcf9f2; --card:#fff; --card2:#f6f3ec;
+    --ink:#1c1c18; --muted:#434843; --faint:#737872;
+    --line:#c3c8c1; --sage:#334537; --bronze:#7d562d; --ok:#334537; --stop:#ba1a1a;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#191b16; --card:#21241d; --card2:#2a2e26;
+      --ink:#f3f0ea; --muted:#c3c8c1; --faint:#8d938a;
+      --line:#3a3f37; --sage:#b7ccb9; --bronze:#f0bd8b; --ok:#b7ccb9; --stop:#ffb4ab;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:2rem 1.25rem 5rem;background:var(--ground);color:var(--ink);
+       font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif}
+  .wrap{max-width:62rem;margin:0 auto}
+  h1{font-family:Georgia,serif;font-size:2rem;margin:0 0 .25rem;color:var(--sage);text-wrap:balance}
+  h2{font-family:Georgia,serif;font-size:1.2rem;margin:0;color:var(--sage)}
+  h3{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);margin:1.25rem 0 .4rem}
+  .sub{color:var(--muted);margin:0 0 1.75rem}
+  code{background:var(--card2);padding:.1em .4em;border-radius:3px;font-size:.86em;
+       font-family:ui-monospace,Consolas,monospace}
+  a{color:var(--sage)}
+
+  .bar{position:sticky;top:0;z-index:5;background:var(--ground);padding:.75rem 0;
+       border-bottom:1px solid var(--line);margin-bottom:1.5rem;display:flex;gap:1rem;
+       align-items:center;flex-wrap:wrap}
+  .track{flex:1;min-width:11rem;height:8px;background:var(--card2);border-radius:99px;overflow:hidden}
+  .fill{height:100%;background:var(--sage);width:0;transition:width .2s}
+  .count{font-variant-numeric:tabular-nums;font-size:.87rem;color:var(--muted);white-space:nowrap}
+  button{font:inherit;font-size:.8rem;padding:.35rem .8rem;border:1px solid var(--line);
+         background:var(--card);color:var(--muted);border-radius:99px;cursor:pointer}
+  button:hover{border-color:var(--sage);color:var(--sage)}
+  button:focus-visible{outline:2px solid var(--sage);outline-offset:2px}
+
+  .sec{background:var(--card);border:1px solid var(--line);border-radius:10px;
+       margin-bottom:.85rem;overflow:hidden}
+  .sec>summary{padding:1rem 1.25rem;cursor:pointer;display:flex;gap:.85rem;align-items:baseline;list-style:none}
+  .sec>summary::-webkit-details-marker{display:none}
+  .sec>summary:hover{background:var(--card2)}
+  .num{font-variant-numeric:tabular-nums;font-weight:700;color:var(--bronze);min-width:1.6rem}
+  .stop .num{color:var(--stop)}
+  .ptitle{flex:1}
+  .pmeta{font-size:.78rem;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .body{padding:0 1.25rem 1.25rem;border-top:1px solid var(--line)}
+  .goal{color:var(--muted);margin:1rem 0 0}
+
+  ul.ck{list-style:none;padding:0;margin:.4rem 0 0}
+  ul.ck li{display:flex;gap:.7rem;align-items:flex-start;padding:.45rem 0;border-bottom:1px solid var(--line)}
+  ul.ck li:last-child{border-bottom:0}
+  input[type=checkbox]{margin-top:.28rem;width:1.05rem;height:1.05rem;flex:0 0 auto;
+                       accent-color:var(--sage);cursor:pointer}
+  input:focus-visible{outline:2px solid var(--sage);outline-offset:2px}
+  label{cursor:pointer;flex:1}
+  li.done label{opacity:.5;text-decoration:line-through}
+
+  blockquote{margin:.5rem 0 0;padding:.5rem .9rem;border-left:3px solid var(--bronze);
+             background:var(--card2);border-radius:0 6px 6px 0;color:var(--muted);font-style:italic}
+  .tblwrap{overflow-x:auto;margin-top:.75rem}
+  table{border-collapse:collapse;width:100%;min-width:38rem;font-size:.9rem}
+  th,td{text-align:left;padding:.55rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:700}
+  tbody tr:last-child td{border-bottom:0}
+  .ask{background:var(--card2);border-radius:8px;padding:.75rem 1rem;margin-top:1rem}
+  .ask h3{margin-top:0}
+  footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);color:var(--faint);font-size:.85rem}
+  @media print{body{padding:0}.bar,button{display:none}.sec{break-inside:avoid}.sec>.body{display:block !important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Client feedback — frontend changes</h1>
+<p class="sub">Her requests, what each one means in the code, and what still needs an answer from her. Ticks save in this browser.</p>
+
+<div class="bar">
+  <div class="track"><div class="fill" id="fill"></div></div>
+  <span class="count" id="count">0 / 0</span>
+  <button id="expand">Expand all</button>
+  <button id="reset">Reset ticks</button>
+</div>
+
+<div id="secs"></div>
+
+<footer><code>docs/client-frontend-changes.html</code> — ticks stored in this browser only.</footer>
+</div>
+
+<script>
+const SECS=[
+{
+ n:1, stop:true, title:"Still to confirm", tag:"Blocked",
+ goal:"Two of the four are answered. Two remain, and the second one blocks the booking flow entirely.",
+ html:`
+  <p class="goal" style="color:var(--ok)"><strong>Answered — Cornrows and Cornrow Mix Twist are separate services.</strong> “Cornrows and cornrow mix are just different styles, we can add them.” Both go on the menu.</p>
+  <p class="goal" style="color:var(--ok)"><strong>Answered — Hair Waxing stays.</strong> “Hair waxing is also one of the services.”</p>
+
+  <h3>The menu that follows</h3>
+  <div class="tblwrap"><table>
+    <thead><tr><th>Service</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td>French Braids</td><td>replaces Didi Olowo — new copy, new photo</td></tr>
+      <tr><td>Cornrows</td><td>new</td></tr>
+      <tr><td>Cornrow Mix Twist</td><td>new</td></tr>
+      <tr><td>Natural Twist</td><td>new — pending the question below</td></tr>
+      <tr><td>Wash and Blow Dry</td><td>replaces Wash &amp; Set — new copy, new photo</td></tr>
+      <tr><td>Hair Treatment</td><td>stays — new photo only</td></tr>
+      <tr><td>Hair Waxing</td><td>stays unchanged</td></tr>
+      <tr style="opacity:.55"><td>Kiko</td><td>removed entirely</td></tr>
+    </tbody>
+  </table></div>
+  <p class="goal"><strong>Seven services, up from five.</strong> Every “5 Services” reference on the site is now wrong — that is covered in the next section.</p>
+
+  <h3>Still open</h3>
+  <blockquote>“To be change to a natural hair twist, as we are dealing with natural hair and product”</blockquote>
+  <p class="goal"><strong>Is Natural Twist a seventh service, or does it replace something?</strong> Read alongside “cornrows and cornrow mix are just different styles, we can add them”, it most likely just gets added too — but she was pointing at a picture when she said it, so confirm rather than assume.</p>
+
+  <p class="goal"><strong>Price and duration for all six new or renamed services.</strong> This is the real blocker. Without durations the booking calendar cannot work out how many hourly slots each service consumes, and without prices the deposit cannot be calculated. Braiding runs long — warn her that anything over three hours will take most of a booking day, and cornrow work often runs four to six.</p>
+ `,
+ tasks:[
+   "Confirm Natural Twist is an addition, not a replacement",
+   "Get a price for each of the six new or renamed services",
+   "Get a duration for each — flag that long braiding services eat most of a booking day",
+   "Send the seven-service list back to her in writing before building"
+ ]
+},
+{
+ n:2, title:"Service menu changes", tag:"Confirmed",
+ goal:"The parts of her message that are unambiguous. Safe to build once the list above is settled.",
+ html:`
+  <div style="border:1px solid var(--bronze);border-left-width:4px;border-radius:6px;padding:.75rem 1rem;margin-top:1rem">
+    <strong>Decide how these get made before making them.</strong>
+    <p class="goal">Backend phase 6 gives her an admin where she adds a service, sets its price and duration, uploads its photo, and the public site updates itself. Once that exists, this entire menu change is ten minutes of data entry <em>she</em> does — not code.</p>
+    <p class="goal"><strong>Hardcode it now</strong> if she needs to see it this week or is showing the site to someone. It is throwaway work that her own admin edits will later replace.</p>
+    <p class="goal"><strong>Wait for the admin</strong> if the timeline allows. She enters her own menu, learns the tool by doing the thing she actually wanted, and you never hardcode a service name again.</p>
+    <p class="goal">Either way the knock-on items in the next section still need doing in code — those are not admin-editable.</p>
+  </div>
+  <blockquote>“Remove didi olowo put french braids.”</blockquote>
+  <p class="goal">A rename isn't enough. The existing description literally reads “an inverted cornrow braided flat against the scalp” — that describes Didi Olowo, not French braids, so the copy has to be rewritten, not relabelled. French braids also plait <em>over</em> rather than under, which is the opposite technique.</p>
+  <blockquote>“Remove kiko and picture”</blockquote>
+  <blockquote>“Remove the wash and set add wash and blow dry instead.”</blockquote>
+  <blockquote>“Remove the hair treatment picture add another african nice picture to it.”</blockquote>
+  <p class="goal">Hair Treatment stays — only its photo changes.</p>
+ `,
+ tasks:[
+   "Replace Didi Olowo with French Braids — new name, slug, description and “what to expect” copy",
+   "Delete Kiko entirely, including its two images",
+   "Rename Wash &amp; Set to Wash and Blow Dry and rewrite its description to describe blow-drying",
+   "Add Cornrows as a new service",
+   "Add Cornrow Mix Twist and Natural Twist, if she confirms they are separate services",
+   "Keep Hair Treatment, swap its photo only",
+   "Update prices and durations to whatever she supplies"
+ ]
+},
+{
+ n:3, title:"Things that break if we only change the menu", tag:"Knock-on",
+ goal:"She didn't mention these, but they reference the old services by name and will be wrong or broken the moment the menu changes.",
+ html:`
+  <div class="tblwrap"><table>
+    <thead><tr><th>Where</th><th>What's wrong after the change</th></tr></thead>
+    <tbody>
+      <tr><td><code>lib/data.ts</code> — testimonials</td><td>Fatima's quote praises “the Didi Olowo service”, which will no longer exist</td></tr>
+      <tr><td><code>components/Hero.tsx</code></td><td>Homepage stat reads “5 Services” — wrong at six or eight</td></tr>
+      <tr><td><code>components/Services.tsx</code></td><td>Homepage strip is a fixed five-column grid; six or seven cards will sit unevenly</td></tr>
+      <tr><td><code>app/(site)/services/page.tsx</code></td><td>Page description lists all five old names for SEO</td></tr>
+      <tr><td><code>app/(site)/book/page.tsx</code></td><td>Booking page description lists all five old names</td></tr>
+      <tr><td><code>lib/data.ts</code> — mock bookings</td><td>Sample bookings point at <code>svc_didi_olowo</code> and <code>svc_kiko</code>, which are being deleted</td></tr>
+      <tr><td><code>lib/data.ts</code> — admin service form</td><td>New services default to the Wash &amp; Set image path</td></tr>
+      <tr><td><code>IMPLEMENTATION-DOC.md</code></td><td>Fixes the five services in two places — it is the source of truth, so it must be updated or it becomes untrue</td></tr>
+      <tr><td><code>CLAUDE.md</code></td><td>Lists the five services as a fixed domain fact</td></tr>
+    </tbody>
+  </table></div>
+ `,
+ tasks:[
+   "Rewrite Fatima's testimonial to reference a service that still exists",
+   "Update the homepage “Services” stat to the new count",
+   "Make the homepage services grid handle the new number of cards cleanly",
+   "Update the page descriptions on /services and /book",
+   "Repoint the sample bookings at services that still exist",
+   "Update the admin service form's default image",
+   "Update IMPLEMENTATION-DOC.md so the source of truth stays true",
+   "Update the fixed domain facts in CLAUDE.md"
+ ]
+},
+{
+ n:4, title:"Where to get the pictures", tag:"Images",
+ goal:"Ranked by how likely they are to have genuine African hairstyling. Free unless marked.",
+ html:`
+  <div class="tblwrap"><table>
+    <thead><tr><th>Site</th><th>Why</th><th>Licence</th></tr></thead>
+    <tbody>
+      <tr><td><a href="https://nappy.co">nappy.co</a></td><td>Built specifically for photos of Black and Brown people. Best hit rate for braids, cornrows and twists by a wide margin. <strong>Start here.</strong></td><td>Free, commercial use</td></tr>
+      <tr><td><a href="https://www.pexels.com">pexels.com</a></td><td>Search “cornrows”, “box braids”, “afro hair salon”, “natural hair twist”. Good salon-in-action shots.</td><td>Free, commercial use</td></tr>
+      <tr><td><a href="https://unsplash.com">unsplash.com</a></td><td>Strong on editorial portraits. Look at the “Eye for Ebony” contributions.</td><td>Free, commercial use</td></tr>
+      <tr><td><a href="https://createherstock.com">createherstock.com</a></td><td>Black women, styled and lifestyle. Smaller library, higher quality.</td><td>Free tier + paid</td></tr>
+      <tr><td><a href="https://www.tonl.co">tonl.co</a></td><td>Authentic, non-stocky diversity photography. Worth it if the budget exists.</td><td>Paid</td></tr>
+      <tr><td><a href="https://stock.adobe.com">stock.adobe.com</a></td><td>Fallback when a specific style can't be found free. Search by exact style name.</td><td>Paid</td></tr>
+    </tbody>
+  </table></div>
+  <p class="goal"><strong>One caution.</strong> Free stock is unreliable at telling French braids from cornrows from twists — a wrong photo on a service page is worse than a generic one, because customers book expecting what they see. Have her check each pick before we wire it in. Her own salon photos would beat all of this, and the implementation doc already lists real product and service photography as pending from her.</p>
+ `,
+ tasks:[
+   "Pull candidates from nappy.co first, then Pexels",
+   "Have her confirm each photo actually shows the style it is labelled as",
+   "Check the licence allows commercial use for every image kept",
+   "Prefer photos where the hairstyle is clearly visible and the subject is roughly centred"
+ ]
+},
+{
+ n:5, title:"Where to save them", tag:"Images",
+ goal:"Save one good original per service. Don't crop, resize or convert anything — that gets done for you.",
+ html:`
+  <p class="goal">Create <code>assets-source/services/</code> in the project root and drop the originals in, named exactly as below. JPG or PNG, whatever the download gives you.</p>
+  <div class="tblwrap"><table>
+    <thead><tr><th>Service</th><th>Save as</th></tr></thead>
+    <tbody>
+      <tr><td>French Braids</td><td><code>assets-source/services/french-braids.jpg</code></td></tr>
+      <tr><td>Cornrows</td><td><code>assets-source/services/cornrows.jpg</code></td></tr>
+      <tr><td>Cornrow Mix Twist</td><td><code>assets-source/services/cornrow-mix-twist.jpg</code></td></tr>
+      <tr><td>Natural Twist</td><td><code>assets-source/services/natural-twist.jpg</code></td></tr>
+      <tr><td>Wash and Blow Dry</td><td><code>assets-source/services/wash-and-blow-dry.jpg</code></td></tr>
+      <tr><td>Hair Treatment <span style="color:var(--faint)">(replacement)</span></td><td><code>assets-source/services/hair-treatment.jpg</code></td></tr>
+      <tr><td>Hair Waxing <span style="color:var(--faint)">(only if it stays)</span></td><td><code>assets-source/services/hair-waxing.jpg</code></td></tr>
+    </tbody>
+  </table></div>
+  <h3>What makes a usable original</h3>
+  <ul class="ck" style="margin-bottom:.5rem">
+    <li><label>At least <strong>1600px on the shorter edge</strong> — two crops get cut from each one, so there needs to be room</label></li>
+    <li><label>Landscape or square framing, with space around the head so a tall crop still works</label></li>
+    <li><label>The hairstyle clearly visible and in focus — that is the whole point of the photo</label></li>
+    <li><label>No watermarks, no burned-in text</label></li>
+  </ul>
+  <p class="goal">Each original becomes two optimised WebP files — a landscape crop for the services page and a portrait crop for the homepage strip — typically cutting several hundred KB down to about 20KB each, the same treatment the current images got.</p>
+ `,
+ tasks:[
+   "Create the <code>assets-source/services/</code> folder",
+   "Save one original per service using the exact filenames above",
+   "Tell me when they're in — I'll crop, convert, optimise and wire them up",
+   "Delete the old Didi Olowo, Kiko and Wash &amp; Set images once the new ones are live"
+ ]
+},
+{
+ n:6, title:"“Everything African” — the wider sweep", tag:"Images",
+ goal:"Her closing point was broader than the service list.",
+ html:`
+  <blockquote>“We deal in African hair and product. would prefer everything in Africa hair and picture to embrace our african hair.”</blockquote>
+  <p class="goal">That reads as a direction for the whole site, not just the services strip. Worth reviewing these with her and replacing anything that doesn't fit — same staging folder, and I'll handle the rest.</p>
+  <div class="tblwrap"><table>
+    <thead><tr><th>Where</th><th>Currently</th></tr></thead>
+    <tbody>
+      <tr><td>Homepage hero</td><td>Woman with braids — likely already fits, but it is the first thing anyone sees, so confirm it</td></tr>
+      <tr><td>Testimonials ×3</td><td>Currently rendered as gradient initials, not photos — the photos exist but are unused. Raise whether she wants faces here</td></tr>
+      <tr><td>About page hero + inset</td><td>Forest, ingredients, mortar and pestle — subject matter, not people</td></tr>
+      <tr><td>Product photography</td><td>Bottles and jars. The doc already lists real product photos as pending from her</td></tr>
+      <tr><td>FAQ page</td><td>Spa interior</td></tr>
+    </tbody>
+  </table></div>
+ `,
+ tasks:[
+   "Walk the site with her and list every image she wants replaced",
+   "Confirm whether testimonials should show faces instead of initials",
+   "Chase the real product photography the doc still lists as outstanding"
+ ]
+},
+{
+ n:7, title:"Before you call it done", tag:"Verify",
+ goal:"What to check once everything is in.",
+ tasks:[
+   "Every service on /services matches the list she signed off, with correct price and duration",
+   "The homepage strip shows the same services and lays out cleanly at the new count",
+   "Booking flow lists the new services and each one is selectable through to confirmation",
+   "No old service name survives anywhere — search the codebase for the removed names",
+   "Old images are deleted and no page requests a missing file",
+   "Every new image has descriptive alt text naming the actual style",
+   "Page still builds and lints clean",
+   "Check it on a phone — the services grid is where a changed card count shows up worst",
+   "Send her a link to click through before you call it delivered"
+ ]
+}
+];
+
+const KEY="pholar-client-changes-v1";
+let state={};
+try{state=JSON.parse(localStorage.getItem(KEY)||"{}")}catch{state={}}
+
+const host=document.getElementById("secs");
+host.innerHTML=SECS.map(s=>`
+  <details class="sec ${s.stop?'stop':''}" id="s${s.n}">
+    <summary>
+      <span class="num">${String(s.n).padStart(2,"0")}</span>
+      <span class="ptitle"><h2>${s.title}</h2></span>
+      <span class="pmeta" data-meta="${s.n}"></span>
+    </summary>
+    <div class="body">
+      <p class="goal">${s.goal}</p>
+      ${s.html||""}
+      <h3>${s.n===1?"To ask":"To do"}</h3>
+      <ul class="ck">${s.tasks.map((t,i)=>row(`${s.n}.t.${i}`,t)).join("")}</ul>
+    </div>
+  </details>`).join("");
+
+function row(id,text){
+  return `<li class="${state[id]?"done":""}">
+    <input type="checkbox" id="${id}" ${state[id]?"checked":""}>
+    <label for="${id}">${text}</label></li>`;
+}
+
+function refresh(){
+  const boxes=[...document.querySelectorAll('.ck input[type=checkbox]')];
+  const done=boxes.filter(b=>b.checked).length;
+  document.getElementById("count").textContent=`${done} / ${boxes.length}`;
+  document.getElementById("fill").style.width=boxes.length?(done/boxes.length*100)+"%":"0";
+  SECS.forEach(s=>{
+    const own=boxes.filter(b=>b.id.startsWith(s.n+"."));
+    const d=own.filter(b=>b.checked).length;
+    const el=document.querySelector(`[data-meta="${s.n}"]`);
+    if(!el)return;
+    el.textContent=`${s.tag} · ${d}/${own.length}`;
+    el.style.color=(own.length&&d===own.length)?"var(--ok)":"";
+  });
+}
+
+host.addEventListener("change",e=>{
+  if(e.target.type!=="checkbox"||!e.target.id)return;
+  state[e.target.id]=e.target.checked;
+  e.target.closest("li").classList.toggle("done",e.target.checked);
+  localStorage.setItem(KEY,JSON.stringify(state));
+  refresh();
+});
+
+document.getElementById("reset").addEventListener("click",()=>{
+  if(!confirm("Clear every tick?"))return;
+  state={};localStorage.removeItem(KEY);
+  document.querySelectorAll('.ck input[type=checkbox]').forEach(b=>{
+    b.checked=false;b.closest("li").classList.remove("done")});
+  refresh();
+});
+
+const eb=document.getElementById("expand");
+eb.addEventListener("click",()=>{
+  const all=[...document.querySelectorAll(".sec")];
+  const open=all.every(d=>d.open);
+  all.forEach(d=>d.open=!open);
+  eb.textContent=open?"Expand all":"Collapse all";
+});
+
+document.getElementById("s1").open=true;
+refresh();
+</script>
+</body>
+</html>

@@ -1,15 +1,19 @@
-import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Globe, Leaf, ChevronDown } from 'lucide-react'
+import HeroCarousel from '@/components/HeroCarousel'
 import RevealOnScroll from '@/components/animations/RevealOnScroll'
 import ParallaxSection, { ParallaxBlob } from '@/components/animations/ParallaxSection'
-import { CURRENCY } from '@/lib/config'
+import { PRODUCTS, SERVICES } from '@/lib/data'
 
+/*
+ * Counted from the data rather than hardcoded. The service list changes — it went from five to
+ * seven — and a stat that has to be remembered separately is a stat that goes stale.
+ */
 const STATS = [
   { value: '10k+', label: 'Happy Customers' },
-  { value: '2+', label: 'Products' },
-  { value: '5', label: 'Services' },
-] as const
+  { value: `${PRODUCTS.filter((p) => p.is_active).length}+`, label: 'Products' },
+  { value: String(SERVICES.filter((s) => s.is_active).length), label: 'Services' },
+]
 
 /** Homepage hero (doc §1.2.1). */
 export default function Hero() {
@@ -81,37 +85,18 @@ export default function Hero() {
         <div className="relative order-1 lg:order-2">
           <ParallaxSection offset={28}>
             <div className="relative aspect-[4/5] overflow-hidden rounded-3xl shadow-2xl">
-              <Image
-                src="/images/hero/woman-braids.webp"
-                alt="Editorial portrait of a woman with intricate braids styled with Pholar Natural products"
-                fill
-                sizes="(max-width: 1024px) 100vw, 50vw"
-                priority
-                className="object-cover"
-              />
-              <div className="glass-effect absolute inset-x-6 bottom-6 flex items-center justify-between rounded-2xl p-6">
-                <div>
-                  <p className="mb-1 font-label-sm text-label-sm text-primary">Featured Routine</p>
-                  <p className="font-headline-md text-headline-md text-on-surface">Botanical Glow</p>
-                </div>
-                <Link
-                  href="/shop"
-                  aria-label="Shop the Botanical Glow routine"
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-secondary shadow-md transition-transform hover:scale-105"
-                >
-                  <ArrowRight className="h-5 w-5" aria-hidden="true" />
-                </Link>
-              </div>
+              <HeroCarousel />
             </div>
           </ParallaxSection>
 
-          {/* Floating certification badges (doc §1.2.1). */}
+          {/*
+            Floating certification badge (doc §1.2.1). The CAD badge that sat opposite this one
+            was removed at the client's request; "All prices in CAD" is still stated on the
+            closing CTA, the shop page and the footer, so the doc's currency requirement holds.
+          */}
           <p className="glass-effect absolute -left-2 top-8 flex items-center gap-2 rounded-full px-4 py-2 font-label-sm text-label-sm text-primary shadow-lg md:-left-6">
             <Leaf className="h-4 w-4 text-secondary" aria-hidden="true" />
             100% Natural
-          </p>
-          <p className="glass-effect absolute -right-2 bottom-28 rounded-full px-4 py-2 font-label-sm text-label-sm text-primary shadow-lg md:-right-6">
-            All prices in {CURRENCY}
           </p>
 
           <ParallaxBlob className="absolute -right-12 -top-12 h-48 w-48 rounded-full bg-secondary-container/30" offset={32} />
