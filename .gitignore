@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# mcp (contains STITCH_API_KEY — never commit)
+.mcp.json
+
+# office lock files
+~$*.docx
+~$*.xlsx
+.stitch-export/

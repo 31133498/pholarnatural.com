@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Throwaway Node scripts used to pull the Stitch export into public/images.
+    // Gitignored, never bundled, and not held to the app's lint rules.
+    ".stitch-export/**",
   ]),
 ]);
 

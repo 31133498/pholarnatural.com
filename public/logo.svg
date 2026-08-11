@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 100">
+  <defs>
+    <style>
+      .cls-1 { fill: #4A5D4E; font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; letter-spacing: 0.1em; }
+      .cls-2 { fill: #D4A373; font-family: 'Montserrat', sans-serif; font-size: 12px; letter-spacing: 0.4em; text-transform: uppercase; }
+      .cls-3 { fill: #4A5D4E; }
+    </style>
+  </defs>
+  <path class="cls-3" d="M40,50 Q45,30 60,35 Q75,40 70,60 Q65,80 40,75 Q15,80 10,60 Q5,40 20,35 Q35,30 40,50 Z" opacity="0.2"/>
+  <text class="cls-1" x="90" y="55">PHOLAR</text>
+  <text class="cls-2" x="92" y="75">NATURAL</text>
+  <path class="cls-3" d="M35,45 C35,45 40,35 45,45 C50,55 40,65 40,65 C40,65 30,55 35,45 Z" />
+</svg>

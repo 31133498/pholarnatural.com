@@ -116,6 +116,86 @@
   body {
     @apply bg-background text-on-surface font-body-md overflow-x-hidden;
   }
+
+  /*
+   * Visible focus indicator on every interactive element (doc §1.1.5, P0).
+   * `:focus-visible` rather than `:focus` so a mouse click does not leave a ring behind,
+   * but keyboard and assistive-tech navigation always does.
+   */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Inputs get a sage glow on focus, per design/DESIGN.md "Components". */
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline-color: var(--color-primary);
+    box-shadow: 0 0 0 4px rgb(51 69 55 / 0.12);
+  }
+}
+
+@layer utilities {
+  /* Skip-to-main link: off-screen until focused (doc §1.1.5, P0). */
+  .skip-link {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    z-index: 100;
+    translate: -50% -150%;
+    padding: 0.75rem 1.5rem;
+    border-bottom-left-radius: 0.75rem;
+    border-bottom-right-radius: 0.75rem;
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    font-size: var(--text-label-sm);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    transition: translate 0.2s ease;
+  }
+  .skip-link:focus-visible {
+    translate: -50% 0;
+    outline-offset: -4px;
+  }
+
+  /* Visually hidden but announced by screen readers — used for aria-live regions. */
+  .sr-only-live {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/*
+ * Reduced motion (doc §1.1.5, P0).
+ *
+ * The JS primitives in components/animations/ opt out via motion's `useReducedMotion`, but the
+ * CSS-driven `.parallax-blob` float, `.tilt-card` lift and every Tailwind `transition-*` need to
+ * be stopped here too — otherwise "reduced motion" would only be half honoured.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .parallax-blob {
+    animation: none !important;
+  }
+  .tilt-card:hover {
+    transform: none !important;
+  }
 }
 
 @layer utilities {
