@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import ShopBrowser from '@/components/ShopBrowser'
 import Newsletter from '@/components/Newsletter'
-import { getProducts, PRODUCT_CARD_IMAGE } from '@/lib/data'
+import { getProducts } from '@/lib/api/products'
+import { PRODUCT_CARD_IMAGE } from '@/lib/data'
 import { CURRENCY } from '@/lib/config'
 
 export const metadata: Metadata = {

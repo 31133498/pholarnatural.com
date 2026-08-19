@@ -4,13 +4,15 @@ import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { ChevronRight, ArrowRight } from 'lucide-react'
 import ProductDetail from '@/components/ProductDetail'
-import { getProductBySlug, getProducts, getProductSlugs, PRODUCT_CARD_IMAGE } from '@/lib/data'
+import { getProductBySlug, getProducts, getProductSlugs } from '@/lib/api/products'
+import { PRODUCT_CARD_IMAGE } from '@/lib/data'
 import { formatPrice } from '@/lib/format'
 import { SITE_URL, CURRENCY } from '@/lib/config'
 
-/** Prerender both product pages at build time. */
-export function generateStaticParams() {
-  return getProductSlugs().map((slug) => ({ slug }))
+/** Prerender known product pages at build time. Falls back to on-demand for unknown slugs. */
+export async function generateStaticParams() {
+  const slugs = await getProductSlugs()
+  return slugs.map((slug) => ({ slug }))
 }
 
 /**

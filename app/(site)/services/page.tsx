@@ -4,7 +4,7 @@ import { Clock, ArrowRight, CalendarDays } from 'lucide-react'
 import ServiceImage from '@/components/ServiceImage'
 import Accordion from '@/components/Accordion'
 import RevealOnScroll from '@/components/animations/RevealOnScroll'
-import { getServices } from '@/lib/data'
+import { getServices } from '@/lib/api/services'
 import { formatPrice, formatDuration, depositFor } from '@/lib/format'
 import { SITE_URL, CURRENCY, BUSINESS, DEPOSIT_RATE } from '@/lib/config'
 
