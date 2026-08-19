@@ -1,5 +1,5 @@
-from typing import List
-from fastapi import APIRouter, Depends
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
@@ -9,11 +9,13 @@ from app.services import product_service
 router = APIRouter()
 
 @router.get("/", response_model=List[ProductResponse])
-def list_products(db: Session = Depends(get_db)):
-    """
-    Retrieve a list of all active products in the store.
-    """
-    return product_service.get_active_products(db=db)
+def list_products(
+    category: Optional[str] = Query(None, description="Filter by category, e.g. 'Hair Oil'"),
+    q: Optional[str] = Query(None, description="Search term matched against name and description"),
+    db: Session = Depends(get_db),
+):
+    """Retrieve active products, with optional category and full-text search filters."""
+    return product_service.get_active_products(db=db, category=category, q=q)
 
 @router.get("/{slug}", response_model=ProductResponse)
 def retrieve_product(slug: str, db: Session = Depends(get_db)):

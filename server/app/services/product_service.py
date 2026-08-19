@@ -2,25 +2,44 @@ import os
 import re
 import shutil
 import uuid
+from typing import Optional
 
 from app.services.storage_service import StorageService
+from sqlalchemy import or_, func
 from sqlalchemy.orm import Session, selectinload
 from fastapi import HTTPException, status, UploadFile
 from app.models.product import Product, ProductImage, ProductVariant
 from app.schemas.product import ProductCreate, ProductUpdate, VariantCreate, VariantUpdate
 
-def get_active_products(db: Session):
+def get_active_products(
+    db: Session,
+    category: Optional[str] = None,
+    q: Optional[str] = None,
+):
     """
-    Fetches all active products, eager-loading their images and variants
-    so we don't hit the database in a loop later.
+    Fetch active products with optional filters.
+    category — exact match on the category column.
+    q        — case-insensitive substring match on name OR description.
     """
-    return db.query(Product)\
-        .filter(Product.is_active == True)\
-        .options(
-            selectinload(Product.images), 
-            selectinload(Product.variants)
-        )\
+    query = db.query(Product).filter(Product.is_active == True)
+
+    if category:
+        query = query.filter(Product.category == category)
+
+    if q:
+        pattern = f"%{q.lower()}%"
+        query = query.filter(
+            or_(
+                func.lower(Product.name).like(pattern),
+                func.lower(Product.description).like(pattern),
+            )
+        )
+
+    return (
+        query
+        .options(selectinload(Product.images), selectinload(Product.variants))
         .all()
+    )
 
 def get_product_by_slug(db: Session, slug: str):
     """
