@@ -2,7 +2,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
 from datetime import date, time, datetime
-from typing import Optional
+from typing import List, Optional
 
 class BookingCreate(BaseModel):
     service_id: UUID
@@ -22,12 +22,33 @@ class BookingResponse(BaseModel):
     end_time: time
     status: str
     deposit_cents: int
-    
+
+    model_config = {"from_attributes": True}
+
+class BookingCreateResponse(BaseModel):
+    """Phase 2 response — no Stripe checkout URL required."""
+    id: UUID
+    booking_date: date
+    start_time: time
+    end_time: time
+    status: str
+    deposit_cents: int
+
     model_config = {"from_attributes": True}
 
 class CheckoutResponse(BaseModel):
     checkout_url: str
     booking_id: UUID
+
+# ----- SLOTS -----
+
+class SlotInfo(BaseModel):
+    time: str
+    available: bool
+
+class SlotsResponse(BaseModel):
+    date: date
+    slots: List[SlotInfo]
 
 # ----- BLOCKED DATES -----
 class BlockedDateCreate(BaseModel):
@@ -39,7 +60,7 @@ class BlockedDateResponse(BaseModel):
     date: date
     reason: Optional[str]
     created_at: datetime
-    
+
     model_config = {"from_attributes": True}
 
 # ----- ORDERS -----

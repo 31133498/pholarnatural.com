@@ -10,10 +10,11 @@ class CartItem(BaseModel):
     quantity: int
 
 class AddressSchema(BaseModel):
-    line1: str
-    line2: Optional[str] = None
+    full_name: str
+    address_line1: str
+    address_line2: Optional[str] = None
     city: str
-    state: str
+    province: str
     postal_code: str
     country: str
 
@@ -40,6 +41,17 @@ class OrderResponse(BaseModel):
 class CheckoutResponse(BaseModel):
     checkout_url: str
     order_id: UUID
+
+class OrderCreateResponse(BaseModel):
+    """Phase 2 response — no Stripe checkout URL required."""
+    id: UUID
+    subtotal_cents: int
+    shipping_cents: int
+    discount_cents: int
+    total_cents: int
+    status: str
+
+    model_config = {"from_attributes": True}
 
 class BlockedDateCreate(BaseModel):
     date: date

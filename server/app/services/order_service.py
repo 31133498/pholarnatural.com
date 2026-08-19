@@ -36,6 +36,81 @@ def update_order_status(db: Session, order_id: int, status_in: OrderStatusUpdate
     db.refresh(order)
     return order
 
+FREE_SHIPPING_THRESHOLD_CENTS = 5_000   # CAD $50
+STANDARD_SHIPPING_CENTS = 995           # CAD $9.95
+
+
+def create_order_phase2(db: Session, order_in: OrderCreate):
+    """Phase 2: create a pending order without Stripe. Returns the new Order row."""
+    variant_ids = [item.variant_id for item in order_in.items]
+    variants = db.query(ProductVariant).join(Product).filter(
+        ProductVariant.id.in_(variant_ids),
+        ProductVariant.is_active == True,
+        Product.is_active == True,
+    ).all()
+    variant_map = {v.id: v for v in variants}
+
+    subtotal_cents = 0
+    db_order_items = []
+    for cart_item in order_in.items:
+        variant = variant_map.get(cart_item.variant_id)
+        if not variant:
+            raise HTTPException(status_code=400, detail=f"Variant {cart_item.variant_id} is invalid or inactive.")
+        if variant.stock_count < cart_item.quantity:
+            raise HTTPException(status_code=400, detail=f"Not enough stock for {variant.product.name}.")
+        line_total = variant.price_cents * cart_item.quantity
+        subtotal_cents += line_total
+        db_order_items.append(OrderItem(
+            product_variant_id=variant.id,
+            product_name=variant.product.name,
+            variant_label=variant.weight_label,
+            quantity=cart_item.quantity,
+            unit_price_cents=variant.price_cents,
+        ))
+
+    discount_cents = 0
+    db_discount = None
+    if order_in.discount_code:
+        db_discount = db.query(Discount).filter(
+            Discount.code == order_in.discount_code.upper(),
+            Discount.is_active == True,
+        ).first()
+        if not db_discount:
+            raise HTTPException(status_code=400, detail="Invalid discount code.")
+        if db_discount.expires_at and db_discount.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Discount code expired.")
+        if db_discount.max_uses and db_discount.used_count >= db_discount.max_uses:
+            raise HTTPException(status_code=400, detail="Discount code usage limit reached.")
+        if db_discount.min_order_cents and subtotal_cents < db_discount.min_order_cents:
+            raise HTTPException(status_code=400, detail="Order minimum not met for this code.")
+        if db_discount.discount_type == "percentage":
+            discount_cents = int(subtotal_cents * (db_discount.value / 100))
+        elif db_discount.discount_type == "fixed":
+            discount_cents = db_discount.value
+        discount_cents = min(discount_cents, subtotal_cents)
+
+    discounted_subtotal = subtotal_cents - discount_cents
+    shipping_cents = 0 if discounted_subtotal >= FREE_SHIPPING_THRESHOLD_CENTS else STANDARD_SHIPPING_CENTS
+    total_cents = discounted_subtotal + shipping_cents
+
+    db_order = Order(
+        customer_name=order_in.customer_name,
+        customer_email=order_in.customer_email,
+        shipping_address=order_in.shipping_address.model_dump(),
+        subtotal_cents=subtotal_cents,
+        shipping_cents=shipping_cents,
+        discount_cents=discount_cents,
+        total_cents=total_cents,
+        status="pending",
+        discount_id=db_discount.id if db_discount else None,
+        items=db_order_items,
+    )
+    db.add(db_order)
+    db.commit()
+    db.refresh(db_order)
+    return db_order
+
+
 def calculate_cart_and_checkout(db: Session, order_in: OrderCreate, payment_gateway: PaymentGateway):
     """Processes a cart, calculates totals, applies discounts, and creates a Stripe Checkout."""
     

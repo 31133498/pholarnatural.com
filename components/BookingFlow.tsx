@@ -7,10 +7,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { Check, ChevronLeft, Clock, CreditCard, Loader2, AlertCircle, CalendarDays } from 'lucide-react'
 import BookingCalendar from '@/components/BookingCalendar'
 import { Field } from '@/components/FormField'
-import { getAvailableSlots, type Slot } from '@/lib/data'
+import { type Slot } from '@/lib/data'
+import { getAvailableSlots, createBooking } from '@/lib/api/bookings'
 import { formatPrice, formatDuration, formatTime, formatDateLong, depositFor, addMinutes } from '@/lib/format'
 import { CANCELLATION_POLICY, CURRENCY, DEPOSIT_RATE } from '@/lib/config'
-import { lastBooking, makeBookingReference, makeId, nowISO } from '@/lib/session-store'
+import { lastBooking, makeBookingReference, nowISO } from '@/lib/session-store'
 import type { Booking, Service } from '@/lib/types'
 
 const STEP_LABELS = ['Service', 'Date', 'Time'] as const
@@ -53,6 +54,7 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
   const [phone, setPhone] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const deposit = service ? depositFor(service.price_cents) : 0
 
@@ -91,30 +93,42 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
     e.preventDefault()
     if (!service || !date || !time || !validateDetails()) return
     setSubmitting(true)
+    setSubmitError(null)
 
-    // Stands in for POST /api/bookings (doc §3.2). No deposit is actually taken.
-    await new Promise((r) => setTimeout(r, 900))
+    try {
+      const response = await createBooking({
+        service_id: service.id,
+        customer_name: name,
+        customer_email: email,
+        customer_phone: phone || null,
+        booking_date: date,
+        start_time: time,
+      })
 
-    const booking: Booking & { service_name: string } = {
-      id: makeId('bk'),
-      reference: makeBookingReference(),
-      service_id: service.id,
-      service_name: service.name,
-      customer_name: name,
-      customer_email: email,
-      customer_phone: phone || null,
-      booking_date: date,
-      start_time: time,
-      end_time: addMinutes(time, service.duration_minutes),
-      status: 'confirmed',
-      deposit_cents: deposit,
-      stripe_payment_intent_id: null,
-      cancellation_reason: null,
-      created_at: nowISO(),
+      const booking: Booking & { service_name: string } = {
+        id: response.id,
+        reference: makeBookingReference(),
+        service_id: service.id,
+        service_name: service.name,
+        customer_name: name,
+        customer_email: email,
+        customer_phone: phone || null,
+        booking_date: date,
+        start_time: time,
+        end_time: addMinutes(time, service.duration_minutes),
+        status: response.status,
+        deposit_cents: response.deposit_cents,
+        stripe_payment_intent_id: null,
+        cancellation_reason: null,
+        created_at: nowISO(),
+      }
+
+      lastBooking.set(booking)
+      router.push('/book/confirmation')
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      setSubmitting(false)
     }
-
-    lastBooking.set(booking)
-    router.push('/book/confirmation')
   }
 
   return (
@@ -392,6 +406,16 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
                 The remaining {formatPrice(service.price_cents - deposit)} is payable in the studio.
                 All prices in {CURRENCY}.
               </p>
+
+              {submitError && (
+                <p
+                  role="alert"
+                  className="mt-4 flex items-center gap-2 rounded-xl bg-error-container p-3 font-body-md text-[13px] text-on-error-container"
+                >
+                  <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  {submitError}
+                </p>
+              )}
 
               <button
                 type="submit"

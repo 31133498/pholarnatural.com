@@ -1,34 +1,44 @@
 from datetime import date
-from typing import List
+from typing import List, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-
-from app.api.dependencies import get_db, get_payment_gateway
-from app.services.payment_gateway import PaymentGateway
-from app.schemas.booking import BlockedDateResponse, BookingCreate, CheckoutResponse
+from app.api.dependencies import get_db
+from app.schemas.booking import (
+    BlockedDateResponse,
+    BookingCreate,
+    BookingCreateResponse,
+    SlotsResponse,
+    SlotInfo,
+)
 from app.services import booking_service
 
 router = APIRouter()
 
-@router.post("/", response_model=CheckoutResponse)
-def create_booking(booking_in: BookingCreate, db: Session = Depends(get_db), payment_gateway: PaymentGateway = Depends(get_payment_gateway)):
-    """Create a new booking and get the Stripe checkout URL."""
-    checkout_url, booking_id = booking_service.create_booking_and_checkout(db=db, booking_in=booking_in, payment_gateway=payment_gateway)
-    return CheckoutResponse(checkout_url=checkout_url, booking_id=booking_id)
 
 @router.get("/blocked-dates", response_model=List[BlockedDateResponse])
 def list_blocked_dates(db: Session = Depends(get_db)):
-    """Get a list of dates that are blocked from booking."""
+    """Get all dates that are blocked from booking."""
     return booking_service.get_blocked_dates(db)
 
-@router.get("/slots")
+
+@router.get("/slots", response_model=SlotsResponse)
 def get_slots(
-    date: date = Query(..., description="The date to check availability for (YYYY-MM-DD)"),
-    service_id: int = Query(None, description="Optional service ID to calculate duration"),
-    db: Session = Depends(get_db)
+    date: date = Query(..., description="Date to check (YYYY-MM-DD)"),
+    service_id: Optional[UUID] = Query(None, description="Service UUID — used to compute duration"),
+    db: Session = Depends(get_db),
 ):
-    """Get available time slots for a specific date."""
-    slots = booking_service.get_available_slots(db, target_date=date, service_id=service_id)
-    return {"date": date, "available_slots": slots}
+    """Return all 7 fixed slots (10:00–16:00) with availability for the given date."""
+    raw = booking_service.get_available_slots(db, target_date=date, service_id=service_id)
+    return SlotsResponse(
+        date=date,
+        slots=[SlotInfo(time=s["time"], available=s["available"]) for s in raw],
+    )
+
+
+@router.post("/", response_model=BookingCreateResponse, status_code=201)
+def create_booking(booking_in: BookingCreate, db: Session = Depends(get_db)):
+    """Create a pending booking (Phase 2 — no Stripe payment required)."""
+    return booking_service.create_booking_phase2(db=db, booking_in=booking_in)

@@ -9,7 +9,8 @@ import { Field, FieldSet } from '@/components/FormField'
 import { useCart } from '@/context/CartContext'
 import { formatPrice } from '@/lib/format'
 import { CURRENCY } from '@/lib/config'
-import { lastOrder, makeOrderNumber, makeId, nowISO } from '@/lib/session-store'
+import { lastOrder, makeOrderNumber, nowISO } from '@/lib/session-store'
+import { createOrder } from '@/lib/api/orders'
 import type { Order, ShippingAddress } from '@/lib/types'
 
 type Errors = Partial<Record<keyof ShippingAddress | 'email', string>>
@@ -67,37 +68,54 @@ export default function CheckoutPage() {
     }
     setSubmitting(true)
 
-    // Stands in for POST /api/orders (doc §3.2). No payment is taken.
-    await new Promise((r) => setTimeout(r, 900))
+    try {
+      const response = await createOrder({
+        customer_name: address.full_name,
+        customer_email: email,
+        shipping_address: {
+          full_name: address.full_name,
+          address_line1: address.address_line1,
+          address_line2: address.address_line2 || undefined,
+          city: address.city,
+          province: address.province,
+          postal_code: address.postal_code,
+          country: address.country,
+        },
+        items: items.map((i) => ({ variant_id: i.variant_id, quantity: i.quantity })),
+      })
 
-    const orderId = makeId('ord')
-    const order: Order = {
-      id: orderId,
-      order_number: makeOrderNumber(),
-      customer_name: address.full_name,
-      customer_email: email,
-      shipping_address: address,
-      subtotal_cents: subtotalCents,
-      shipping_cents: shippingCents,
-      total_cents: totalCents,
-      status: 'confirmed',
-      stripe_payment_intent_id: null,
-      created_at: nowISO(),
-      items: items.map((i, idx) => ({
-        id: `oi_${idx}`,
-        order_id: orderId,
-        product_variant_id: i.variant_id,
-        product_name: i.product_name,
-        variant_label: i.variant_label,
-        quantity: i.quantity,
-        unit_price_cents: i.unit_price_cents,
-        image_url: i.image_url,
-      })),
+      const orderId = response.id
+      const order: Order = {
+        id: orderId,
+        order_number: makeOrderNumber(),
+        customer_name: address.full_name,
+        customer_email: email,
+        shipping_address: address,
+        subtotal_cents: response.subtotal_cents,
+        shipping_cents: response.shipping_cents,
+        total_cents: response.total_cents,
+        status: response.status,
+        stripe_payment_intent_id: null,
+        created_at: nowISO(),
+        items: items.map((i, idx) => ({
+          id: `oi_${idx}`,
+          order_id: orderId,
+          product_variant_id: i.variant_id,
+          product_name: i.product_name,
+          variant_label: i.variant_label,
+          quantity: i.quantity,
+          unit_price_cents: i.unit_price_cents,
+          image_url: i.image_url,
+        })),
+      }
+
+      lastOrder.set(order)
+      clear()
+      router.push('/order-confirmation')
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      setSubmitting(false)
     }
-
-    lastOrder.set(order)
-    clear()
-    router.push('/order-confirmation')
   }
 
   if (hydrated && items.length === 0) {

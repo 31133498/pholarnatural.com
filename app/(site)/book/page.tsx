@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import BookingFlow from '@/components/BookingFlow'
-import { getServices, getBlockedDates } from '@/lib/data'
+import { getServices } from '@/lib/api/services'
+import { getBlockedDates } from '@/lib/api/bookings'
 
 export const metadata: Metadata = {
   title: 'Book an Appointment',

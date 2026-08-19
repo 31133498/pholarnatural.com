@@ -1,4 +1,5 @@
-from typing import Optional
+from typing import List, Optional
+from uuid import UUID
 
 from app.services.payment_gateway import PaymentGateway
 from sqlalchemy.orm import Session
@@ -10,6 +11,11 @@ from app.models.service import Service
 from app.schemas.booking import BookingCreate
 from app.core.config import settings
 from app.schemas.booking import BlockedDateCreate
+
+# Fixed 60-min slots: Mon–Sat 10:00–17:00 (last start 16:00 → ends 17:00)
+SLOT_TIMES: List[str] = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00']
+CLOSE_TIME = time(17, 0)
+DEPOSIT_RATE = 0.1
 
 def get_bookings(db: Session, filter_date: Optional[date] = None, status: Optional[str] = None):
     """Fetch bookings with optional filtering."""
@@ -39,64 +45,100 @@ def get_blocked_dates(db: Session):
     today = datetime.now(timezone.utc).date()
     return db.query(BlockedDate).filter(BlockedDate.date >= today).all()
 
-def get_available_slots(db: Session, target_date: date, service_id: int = None):
+def get_available_slots(db: Session, target_date: date, service_id: Optional[UUID] = None):
     """
-    Calculate available time slots for a given date.
-    Assumes operating hours are 9:00 AM to 5:00 PM.
+    Return all 7 fixed slots (10:00–16:00) with availability for the given date.
+    A slot is unavailable if: date is blocked, date is Sunday, the service would
+    run past 17:00, or an existing booking overlaps.
     """
-    # 1. Check if the entire date is blocked
-    is_blocked = db.query(BlockedDate).filter(BlockedDate.date == target_date).first()
-    if is_blocked:
-        return []
+    # 1. Blocked date → all unavailable
+    if db.query(BlockedDate).filter(BlockedDate.date == target_date).first():
+        return [{"time": t, "available": False} for t in SLOT_TIMES]
 
-    # 2. Get existing bookings for this date (that aren't cancelled)
-    existing_bookings = db.query(Booking).filter(
+    # 2. Sunday (weekday 6) → all unavailable
+    if target_date.weekday() == 6:
+        return [{"time": t, "available": False} for t in SLOT_TIMES]
+
+    # 3. Determine service duration (default 60 min if no service given)
+    duration_minutes = 60
+    if service_id:
+        svc = db.query(Service).filter(Service.id == service_id).first()
+        if svc:
+            duration_minutes = svc.duration_minutes
+
+    # 4. Existing bookings for this date
+    existing = db.query(Booking).filter(
         Booking.booking_date == target_date,
         Booking.status.in_(["pending", "confirmed"])
     ).all()
 
-    # 3. Define Salon Operating Hours
-    open_time = time(9, 0)
-    close_time = time(17, 0) # 5:00 PM
+    dummy = date(2000, 1, 1)  # arbitrary date for timedelta math
+    close_dt = datetime.combine(dummy, CLOSE_TIME)
 
-    # 4. Determine required duration
-    duration_minutes = 120 # Default duration
-    if service_id:
-        service = db.query(Service).filter(Service.id == service_id).first()
-        if service:
-            duration_minutes = service.duration_minutes
+    result = []
+    for slot_str in SLOT_TIMES:
+        h, m = map(int, slot_str.split(':'))
+        slot_start = time(h, m)
+        slot_end_dt = datetime.combine(dummy, slot_start) + timedelta(minutes=duration_minutes)
+        slot_end = slot_end_dt.time()
 
-    available_slots = []
-    
-    # We use datetime combination to easily add timedelta minutes
-    current_dt = datetime.combine(target_date, open_time)
-    end_dt = datetime.combine(target_date, close_time)
+        # Service doesn't fit before close
+        if slot_end_dt > close_dt:
+            result.append({"time": slot_str, "available": False})
+            continue
 
-    # 5. Generate slots in 30-minute intervals
-    while current_dt + timedelta(minutes=duration_minutes) <= end_dt:
-        slot_start = current_dt.time()
-        slot_end = (current_dt + timedelta(minutes=duration_minutes)).time()
+        # Check overlap with any existing booking
+        conflict = any(
+            max(slot_start, b.start_time) < min(slot_end, b.end_time)
+            for b in existing
+        )
+        result.append({"time": slot_str, "available": not conflict})
 
-        # Check for overlaps with existing bookings
-        overlap = False
-        for b in existing_bookings:
-            # Overlap formula: Max(start1, start2) < Min(end1, end2)
-            if max(slot_start, b.start_time) < min(slot_end, b.end_time):
-                overlap = True
-                break
+    return result
 
-        # Also, check if the slot is in the past (if the target_date is today)
-        if target_date == datetime.now().date() and slot_start < datetime.now().time():
-            overlap = True
+def create_booking_phase2(db: Session, booking_in: BookingCreate):
+    """Phase 2: create a pending booking without Stripe. Returns the new Booking row."""
+    service = db.query(Service).filter(
+        Service.id == booking_in.service_id,
+        Service.is_active == True
+    ).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found.")
 
-        if not overlap:
-            # Format time nicely, e.g., "09:00", "13:30"
-            available_slots.append(slot_start.strftime("%H:%M"))
+    today = datetime.now(timezone.utc).date()
+    if booking_in.booking_date < today:
+        raise HTTPException(status_code=400, detail="Cannot book a date in the past.")
+    if booking_in.booking_date.weekday() == 6:
+        raise HTTPException(status_code=400, detail="We are closed on Sundays.")
 
-        # Move forward by 30 minutes to check the next possible start time
-        current_dt += timedelta(minutes=30) 
+    slot_str = booking_in.start_time.strftime("%H:%M")
+    if slot_str not in SLOT_TIMES:
+        raise HTTPException(status_code=400, detail=f"Invalid time slot: {slot_str}.")
 
-    return available_slots
+    end_time = check_availability(
+        db=db,
+        booking_date=booking_in.booking_date,
+        start_time=booking_in.start_time,
+        duration_minutes=service.duration_minutes,
+    )
+
+    deposit_cents = int(service.price_cents * DEPOSIT_RATE)
+    db_booking = Booking(
+        service_id=service.id,
+        customer_name=booking_in.customer_name,
+        customer_email=booking_in.customer_email,
+        customer_phone=booking_in.customer_phone,
+        booking_date=booking_in.booking_date,
+        start_time=booking_in.start_time,
+        end_time=end_time,
+        status="pending",
+        deposit_cents=deposit_cents,
+    )
+    db.add(db_booking)
+    db.commit()
+    db.refresh(db_booking)
+    return db_booking
+
 
 def block_date(db: Session, block_in: BlockedDateCreate):
     """Block a specific date so customers cannot book it."""

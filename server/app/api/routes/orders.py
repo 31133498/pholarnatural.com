@@ -1,16 +1,14 @@
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-import stripe
 
 from app.api.dependencies import get_db
-from app.schemas.order import OrderCreate, CheckoutResponse
+from app.schemas.order import OrderCreate, OrderCreateResponse
 from app.services import order_service
-from app.core.config import settings
 
 router = APIRouter()
 
-@router.post("/", response_model=CheckoutResponse)
+
+@router.post("/", response_model=OrderCreateResponse, status_code=201)
 def create_order(order_in: OrderCreate, db: Session = Depends(get_db)):
-    """Creates a new order and returns a Stripe checkout URL."""
-    checkout_url, order_id = order_service.calculate_cart_and_checkout(db=db, order_in=order_in)
-    return CheckoutResponse(checkout_url=checkout_url, order_id=order_id)
+    """Create a pending order (Phase 2 — no Stripe payment required)."""
+    return order_service.create_order_phase2(db=db, order_in=order_in)
