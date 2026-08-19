@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.routes import admin_auth, orders, products, services, bookings, admin_bookings, admin_orders, admin_products, admin_services, admin_discounts, admin_variants, stripe_webhook
 
-app = FastAPI(title=settings.PROJECT_NAME)
+app = FastAPI(title=settings.PROJECT_NAME)  # CI deploy test
 
 app.add_middleware(
     CORSMiddleware,
