@@ -1,7 +1,7 @@
 from typing import Optional
 
 from app.services.payment_gateway import PaymentGateway
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from fastapi import HTTPException
 from datetime import datetime, timezone
 
@@ -12,29 +12,26 @@ from app.core.config import settings
 from app.schemas.order import OrderStatusUpdate
 
 def get_orders(db: Session, status: Optional[str] = None):
-    """Fetch all orders, optionally filtering by status."""
-    query = db.query(Order)
+    """Fetch all orders with items eagerly loaded, optionally filtering by status."""
+    query = db.query(Order).options(selectinload(Order.items))
     if status:
         query = query.filter(Order.status == status)
     return query.order_by(Order.created_at.desc()).all()
 
-def get_order_detail(db: Session, order_id: int):
-    """Fetch a single order and eagerly load its items."""
-    order = db.query(Order).filter(Order.id == order_id).first()
+def get_order_detail(db: Session, order_id):
+    """Fetch a single order with items eagerly loaded."""
+    order = db.query(Order).options(selectinload(Order.items)).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
 
-def update_order_status(db: Session, order_id: int, status_in: OrderStatusUpdate):
-    """Update the fulfillment status of an order (e.g., 'shipped')."""
+def update_order_status(db: Session, order_id, status_in: OrderStatusUpdate):
+    """Update the fulfillment status of an order."""
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-        
     order.status = status_in.status
     db.commit()
-    db.refresh(order)
-    return order
 
 FREE_SHIPPING_THRESHOLD_CENTS = 5_000   # CAD $50
 STANDARD_SHIPPING_CENTS = 995           # CAD $9.95

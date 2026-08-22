@@ -1,8 +1,7 @@
 'use client'
 
-import Image from 'next/image'
-import { useMemo, useState } from 'react'
-import { Receipt, Eye, ArrowRight } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Receipt, Eye, ArrowRight, Loader2 } from 'lucide-react'
 import {
   PageHeader,
   StatusBadge,
@@ -14,21 +13,28 @@ import {
   EmptyState,
 } from '@/components/admin/ui'
 import { useToast } from '@/context/ToastContext'
-import { ORDERS } from '@/lib/data'
+import { listAdminOrders, updateOrderStatus, type AdminOrder } from '@/lib/api/admin-orders'
 import { formatPrice, formatDateShort, formatDateLong } from '@/lib/format'
-import type { Order, OrderStatus } from '@/lib/types'
 
 /** The fulfilment pipeline, in order (doc §1.14.5). */
-const STATUS_FLOW: OrderStatus[] = ['confirmed', 'processing', 'shipped', 'delivered']
-
-type Filter = 'all' | OrderStatus
+const STATUS_FLOW = ['confirmed', 'processing', 'shipped', 'delivered'] as const
+type PipelineStatus = (typeof STATUS_FLOW)[number]
+type Filter = 'all' | PipelineStatus | 'cancelled' | 'pending' | 'paid'
 
 /** Order management (doc §1.14.5). */
 export default function AdminOrdersPage() {
-  const [orders, setOrders] = useState<Order[]>(ORDERS)
+  const [orders, setOrders] = useState<AdminOrder[]>([])
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>('all')
-  const [viewing, setViewing] = useState<Order | null>(null)
+  const [viewing, setViewing] = useState<AdminOrder | null>(null)
   const { toast } = useToast()
+
+  useEffect(() => {
+    listAdminOrders()
+      .then(setOrders)
+      .catch(() => toast('Failed to load orders', 'error'))
+      .finally(() => setLoading(false))
+  }, [toast])
 
   const visible = useMemo(
     () =>
@@ -38,27 +44,33 @@ export default function AdminOrdersPage() {
     [orders, filter],
   )
 
-  /** The next stage in the pipeline, or null once delivered / cancelled. */
-  const nextStatus = (status: OrderStatus): OrderStatus | null => {
-    const i = STATUS_FLOW.indexOf(status)
+  const nextStatus = (status: string): PipelineStatus | null => {
+    const i = STATUS_FLOW.indexOf(status as PipelineStatus)
     if (i === -1 || i === STATUS_FLOW.length - 1) return null
     return STATUS_FLOW[i + 1]
   }
 
-  function advance(order: Order) {
+  async function advance(order: AdminOrder) {
     const next = nextStatus(order.status)
     if (!next) return
-    setOrders((os) => os.map((o) => (o.id === order.id ? { ...o, status: next } : o)))
-    setViewing((v) => (v && v.id === order.id ? { ...v, status: next } : v))
-    toast(`${order.order_number} marked ${next}`)
+    try {
+      await updateOrderStatus(order.id, next)
+      setOrders((os) => os.map((o) => (o.id === order.id ? { ...o, status: next } : o)))
+      setViewing((v) => (v?.id === order.id ? { ...v, status: next } : v))
+      toast(`${order.order_number} marked ${next}`)
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Update failed', 'error')
+    }
   }
+
+  const filterOptions: Filter[] = ['all', 'pending', 'paid', ...STATUS_FLOW, 'cancelled']
 
   return (
     <>
       <PageHeader title="Orders" description="Track and fulfil customer orders." />
 
       <div role="radiogroup" aria-label="Filter by status" className="mb-6 flex flex-wrap gap-2">
-        {(['all', ...STATUS_FLOW, 'cancelled'] as const).map((f) => (
+        {filterOptions.map((f) => (
           <button
             key={f}
             type="button"
@@ -76,7 +88,11 @@ export default function AdminOrdersPage() {
         ))}
       </div>
 
-      {visible.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" aria-label="Loading orders" />
+        </div>
+      ) : visible.length === 0 ? (
         <EmptyState icon={Receipt} title="No orders" message="Nothing matches this filter." />
       ) : (
         <TableWrap caption="All orders">
@@ -138,124 +154,144 @@ export default function AdminOrdersPage() {
       )}
 
       {viewing && (
-        <Modal open onClose={() => setViewing(null)} title={`Order ${viewing.order_number}`} wide>
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <StatusBadge status={viewing.status} />
-              <p className="font-body-md text-[13px] text-on-surface-variant">
-                Placed {formatDateLong(viewing.created_at.slice(0, 10))}
-              </p>
-            </div>
-
-            <section>
-              <h3 className="mb-3 font-label-sm text-label-sm font-bold uppercase text-primary">Items</h3>
-              <ul className="space-y-3">
-                {viewing.items.map((item) => (
-                  <li key={item.id} className="flex items-center gap-3">
-                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-surface-container">
-                      {item.image_url && (
-                        <Image src={item.image_url} alt="" fill sizes="56px" className="object-cover" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-body-md text-body-md font-semibold text-on-surface">
-                        {item.product_name}
-                      </p>
-                      <p className="font-body-md text-[12px] text-on-surface-variant">
-                        {item.variant_label} · Qty {item.quantity}
-                      </p>
-                    </div>
-                    <p className="font-body-md text-body-md font-bold text-primary">
-                      {formatPrice(item.unit_price_cents * item.quantity)}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </section>
-
-            <section className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div>
-                <h3 className="mb-3 font-label-sm text-label-sm font-bold uppercase text-primary">
-                  Shipping address
-                </h3>
-                <address className="font-body-md text-body-md not-italic text-on-surface-variant">
-                  <span className="block text-on-surface">{viewing.shipping_address.full_name}</span>
-                  <span className="block">{viewing.shipping_address.address_line1}</span>
-                  {viewing.shipping_address.address_line2 && (
-                    <span className="block">{viewing.shipping_address.address_line2}</span>
-                  )}
-                  <span className="block">
-                    {viewing.shipping_address.city}, {viewing.shipping_address.province}{' '}
-                    {viewing.shipping_address.postal_code}
-                  </span>
-                  <span className="block">{viewing.shipping_address.country}</span>
-                </address>
-              </div>
-
-              <div>
-                <h3 className="mb-3 font-label-sm text-label-sm font-bold uppercase text-primary">Payment</h3>
-                <dl className="space-y-2 font-body-md text-body-md">
-                  <div className="flex justify-between">
-                    <dt className="text-on-surface-variant">Subtotal</dt>
-                    <dd className="text-on-surface">{formatPrice(viewing.subtotal_cents)}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-on-surface-variant">Shipping</dt>
-                    <dd className="text-on-surface">
-                      {viewing.shipping_cents === 0 ? 'Free' : formatPrice(viewing.shipping_cents)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between border-t border-outline-variant pt-2 font-semibold">
-                    <dt className="text-primary">Total</dt>
-                    <dd className="text-primary">{formatPrice(viewing.total_cents)}</dd>
-                  </div>
-                </dl>
-                <p className="mt-3 font-body-md text-[12px] text-on-surface-variant">
-                  Stripe intent: {viewing.stripe_payment_intent_id ?? 'not connected yet'}
-                </p>
-              </div>
-            </section>
-
-            {/* Status flow (doc §1.14.5) */}
-            <section className="border-t border-outline-variant pt-4">
-              <h3 className="mb-3 font-label-sm text-label-sm font-bold uppercase text-primary">
-                Fulfilment
-              </h3>
-              <ol className="mb-4 flex flex-wrap items-center gap-2">
-                {STATUS_FLOW.map((s, i) => {
-                  const currentIndex = STATUS_FLOW.indexOf(viewing.status)
-                  const done = currentIndex >= i && currentIndex !== -1
-                  return (
-                    <li key={s} className="flex items-center gap-2">
-                      <span
-                        className={`rounded-full px-3 py-1 font-label-sm text-[11px] font-bold uppercase ${
-                          done ? 'bg-primary text-white' : 'bg-surface-container-high text-on-surface-variant'
-                        }`}
-                      >
-                        {s}
-                      </span>
-                      {i < STATUS_FLOW.length - 1 && (
-                        <span className="h-px w-4 bg-outline-variant" aria-hidden="true" />
-                      )}
-                    </li>
-                  )
-                })}
-              </ol>
-
-              {nextStatus(viewing.status) ? (
-                <AdminButton onClick={() => advance(viewing)}>
-                  Mark as {nextStatus(viewing.status)}
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </AdminButton>
-              ) : (
-                <p className="font-body-md text-body-md text-on-surface-variant">
-                  This order has reached the end of the pipeline.
-                </p>
-              )}
-            </section>
-          </div>
-        </Modal>
+        <OrderModal
+          order={viewing}
+          onClose={() => setViewing(null)}
+          onAdvance={() => advance(viewing)}
+          nextStatus={nextStatus(viewing.status)}
+        />
       )}
     </>
+  )
+}
+
+function OrderModal({
+  order,
+  onClose,
+  onAdvance,
+  nextStatus,
+}: {
+  order: AdminOrder
+  onClose: () => void
+  onAdvance: () => void
+  nextStatus: string | null
+}) {
+  const addr = order.shipping_address
+
+  return (
+    <Modal open onClose={onClose} title={`Order ${order.order_number}`} wide>
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <StatusBadge status={order.status} />
+          <p className="font-body-md text-[13px] text-on-surface-variant">
+            Placed {formatDateLong(order.created_at.slice(0, 10))}
+          </p>
+        </div>
+
+        <section>
+          <h3 className="mb-3 font-label-sm text-label-sm font-bold uppercase text-primary">Items</h3>
+          <ul className="divide-y divide-outline-variant">
+            {order.items.map((item) => (
+              <li key={item.id} className="flex items-center justify-between gap-4 py-3">
+                <div>
+                  <p className="font-body-md text-body-md font-semibold text-on-surface">
+                    {item.product_name}
+                  </p>
+                  <p className="font-body-md text-[12px] text-on-surface-variant">
+                    {item.variant_label ?? '—'} · Qty {item.quantity}
+                  </p>
+                </div>
+                <p className="shrink-0 font-body-md text-body-md font-bold text-primary">
+                  {formatPrice(item.unit_price_cents * item.quantity)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div>
+            <h3 className="mb-3 font-label-sm text-label-sm font-bold uppercase text-primary">
+              Shipping address
+            </h3>
+            <address className="font-body-md text-body-md not-italic text-on-surface-variant">
+              <span className="block font-semibold text-on-surface">{addr.full_name}</span>
+              <span className="block">{addr.address_line1}</span>
+              {addr.address_line2 && <span className="block">{addr.address_line2}</span>}
+              <span className="block">
+                {addr.city}, {addr.province} {addr.postal_code}
+              </span>
+              <span className="block">{addr.country}</span>
+            </address>
+          </div>
+
+          <div>
+            <h3 className="mb-3 font-label-sm text-label-sm font-bold uppercase text-primary">Payment</h3>
+            <dl className="space-y-2 font-body-md text-body-md">
+              <div className="flex justify-between">
+                <dt className="text-on-surface-variant">Subtotal</dt>
+                <dd className="text-on-surface">{formatPrice(order.subtotal_cents)}</dd>
+              </div>
+              {order.discount_cents > 0 && (
+                <div className="flex justify-between text-primary">
+                  <dt>Discount</dt>
+                  <dd>−{formatPrice(order.discount_cents)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <dt className="text-on-surface-variant">Shipping</dt>
+                <dd className="text-on-surface">
+                  {order.shipping_cents === 0 ? 'Free' : formatPrice(order.shipping_cents)}
+                </dd>
+              </div>
+              <div className="flex justify-between border-t border-outline-variant pt-2 font-semibold">
+                <dt className="text-primary">Total</dt>
+                <dd className="text-primary">{formatPrice(order.total_cents)}</dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+
+        {/* Status flow (doc §1.14.5) */}
+        <section className="border-t border-outline-variant pt-4">
+          <h3 className="mb-3 font-label-sm text-label-sm font-bold uppercase text-primary">
+            Fulfilment
+          </h3>
+          <ol className="mb-4 flex flex-wrap items-center gap-2">
+            {(['confirmed', 'processing', 'shipped', 'delivered'] as const).map((s, i) => {
+              const currentIndex = (['confirmed', 'processing', 'shipped', 'delivered'] as const).indexOf(
+                order.status as never,
+              )
+              const done = currentIndex >= i && currentIndex !== -1
+              return (
+                <li key={s} className="flex items-center gap-2">
+                  <span
+                    className={`rounded-full px-3 py-1 font-label-sm text-[11px] font-bold uppercase ${
+                      done ? 'bg-primary text-white' : 'bg-surface-container-high text-on-surface-variant'
+                    }`}
+                  >
+                    {s}
+                  </span>
+                  {i < 3 && <span className="h-px w-4 bg-outline-variant" aria-hidden="true" />}
+                </li>
+              )
+            })}
+          </ol>
+
+          {nextStatus ? (
+            <AdminButton onClick={onAdvance}>
+              Mark as {nextStatus}
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </AdminButton>
+          ) : (
+            <p className="font-body-md text-body-md text-on-surface-variant">
+              {order.status === 'delivered'
+                ? 'Order delivered — pipeline complete.'
+                : 'This order is not currently in the fulfilment pipeline.'}
+            </p>
+          )}
+        </section>
+      </div>
+    </Modal>
   )
 }

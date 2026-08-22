@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Plus, Pencil, Trash2, TicketPercent } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Plus, Pencil, Trash2, TicketPercent, Loader2 } from 'lucide-react'
 import {
   PageHeader,
   StatusBadge,
@@ -15,33 +15,83 @@ import {
 } from '@/components/admin/ui'
 import { Field } from '@/components/FormField'
 import { useToast } from '@/context/ToastContext'
-import { DISCOUNTS } from '@/lib/data'
+import {
+  listAdminDiscounts,
+  createAdminDiscount,
+  updateAdminDiscount,
+  deleteAdminDiscount,
+  type AdminDiscount,
+  type DiscountCreatePayload,
+} from '@/lib/api/admin-discounts'
 import { formatPrice, formatDateShort } from '@/lib/format'
-import type { Discount, DiscountType } from '@/lib/types'
 
 /** Discount management (doc §1.14.6). */
 export default function AdminDiscountsPage() {
-  const [discounts, setDiscounts] = useState<Discount[]>(DISCOUNTS)
-  const [editing, setEditing] = useState<Discount | null>(null)
+  const [discounts, setDiscounts] = useState<AdminDiscount[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState<AdminDiscount | null>(null)
   const [creating, setCreating] = useState(false)
-  const [deleting, setDeleting] = useState<Discount | null>(null)
+  const [deleting, setDeleting] = useState<AdminDiscount | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [confirmLoading, setConfirmLoading] = useState(false)
   const { toast } = useToast()
+
+  useEffect(() => {
+    listAdminDiscounts()
+      .then(setDiscounts)
+      .catch(() => toast('Failed to load discounts', 'error'))
+      .finally(() => setLoading(false))
+  }, [toast])
 
   const closeForm = () => {
     setEditing(null)
     setCreating(false)
   }
 
-  /** A code can be inactive because it was switched off, expired, or hit its usage cap. */
-  const effectiveStatus = (d: Discount) => {
+  const effectiveStatus = (d: AdminDiscount) => {
     if (!d.is_active) return 'draft'
-    if (new Date(d.expires_at) < new Date()) return 'expired'
-    if (d.used_count >= d.max_uses) return 'expired'
+    if (d.expires_at && new Date(d.expires_at) < new Date()) return 'expired'
+    if (d.max_uses !== null && d.used_count >= d.max_uses) return 'expired'
     return 'active'
   }
 
-  const describeValue = (d: Discount) =>
+  const describeValue = (d: AdminDiscount) =>
     d.discount_type === 'percentage' ? `${d.value}% off` : `${formatPrice(d.value)} off`
+
+  async function handleSave(payload: DiscountCreatePayload, id?: string) {
+    setSaving(true)
+    try {
+      if (id) {
+        const updated = await updateAdminDiscount(id, payload)
+        setDiscounts((ds) => ds.map((d) => (d.id === id ? updated : d)))
+        toast(`${updated.code} updated`)
+      } else {
+        const created = await createAdminDiscount(payload)
+        setDiscounts((ds) => [...ds, created])
+        toast(`${created.code} created`)
+      }
+      closeForm()
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Save failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleting) return
+    setConfirmLoading(true)
+    try {
+      await deleteAdminDiscount(deleting.id)
+      setDiscounts((ds) => ds.filter((d) => d.id !== deleting.id))
+      toast(`${deleting.code} deleted`, 'info')
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Delete failed', 'error')
+    } finally {
+      setConfirmLoading(false)
+      setDeleting(null)
+    }
+  }
 
   return (
     <>
@@ -56,7 +106,11 @@ export default function AdminDiscountsPage() {
         }
       />
 
-      {discounts.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" aria-label="Loading discounts" />
+        </div>
+      ) : discounts.length === 0 ? (
         <EmptyState
           icon={TicketPercent}
           title="No discount codes"
@@ -87,23 +141,31 @@ export default function AdminDiscountsPage() {
                 <Td className="capitalize">{d.discount_type}</Td>
                 <Td className="font-semibold text-on-surface">{describeValue(d)}</Td>
                 <Td>
-                  {d.used_count} / {d.max_uses}
-                  <span
-                    className="mt-1 block h-1 w-20 overflow-hidden rounded-full bg-surface-container-highest"
-                    role="progressbar"
-                    aria-valuemin={0}
-                    aria-valuemax={d.max_uses}
-                    aria-valuenow={d.used_count}
-                    aria-label={`${d.code} usage`}
-                  >
-                    <span
-                      className="block h-full rounded-full bg-primary"
-                      style={{ width: `${Math.min(100, (d.used_count / d.max_uses) * 100)}%` }}
-                    />
-                  </span>
+                  {d.max_uses === null ? (
+                    <span>
+                      {d.used_count} / <span className="text-on-surface-variant">∞</span>
+                    </span>
+                  ) : (
+                    <>
+                      {d.used_count} / {d.max_uses}
+                      <span
+                        className="mt-1 block h-1 w-20 overflow-hidden rounded-full bg-surface-container-highest"
+                        role="progressbar"
+                        aria-valuemin={0}
+                        aria-valuemax={d.max_uses}
+                        aria-valuenow={d.used_count}
+                        aria-label={`${d.code} usage`}
+                      >
+                        <span
+                          className="block h-full rounded-full bg-primary"
+                          style={{ width: `${Math.min(100, (d.used_count / d.max_uses) * 100)}%` }}
+                        />
+                      </span>
+                    </>
+                  )}
                 </Td>
-                <Td>{d.min_order_cents === 0 ? '—' : formatPrice(d.min_order_cents)}</Td>
-                <Td>{formatDateShort(d.expires_at.slice(0, 10))}</Td>
+                <Td>{d.min_order_cents ? formatPrice(d.min_order_cents) : '—'}</Td>
+                <Td>{d.expires_at ? formatDateShort(d.expires_at.slice(0, 10)) : '—'}</Td>
                 <Td>
                   <StatusBadge status={effectiveStatus(d)} />
                 </Td>
@@ -137,20 +199,9 @@ export default function AdminDiscountsPage() {
         <DiscountForm
           key={editing?.id ?? 'new'}
           discount={editing}
+          saving={saving}
           onClose={closeForm}
-          onSave={(form) => {
-            if (editing) {
-              setDiscounts((ds) => ds.map((d) => (d.id === editing.id ? { ...d, ...form } : d)))
-              toast(`${form.code} updated`)
-            } else {
-              setDiscounts((ds) => [
-                ...ds,
-                { ...form, id: `dsc_${Date.now()}`, used_count: 0, is_active: true },
-              ])
-              toast(`${form.code} created`)
-            }
-            closeForm()
-          }}
+          onSave={(payload) => handleSave(payload, editing?.id)}
         />
       )}
 
@@ -159,12 +210,7 @@ export default function AdminDiscountsPage() {
         title={`Delete ${deleting?.code}?`}
         message="Customers who try this code will be told it is invalid. This cannot be undone."
         onCancel={() => setDeleting(null)}
-        onConfirm={() => {
-          if (!deleting) return
-          setDiscounts((ds) => ds.filter((d) => d.id !== deleting.id))
-          toast(`${deleting.code} deleted`, 'info')
-          setDeleting(null)
-        }}
+        onConfirm={handleDelete}
       />
     </>
   )
@@ -172,21 +218,24 @@ export default function AdminDiscountsPage() {
 
 interface DiscountFormValues {
   code: string
-  discount_type: DiscountType
+  discount_type: 'percentage' | 'fixed'
   value: number
-  max_uses: number
-  min_order_cents: number
+  max_uses: string
+  min_order_cents: string
   expires_at: string
+  is_active: boolean
 }
 
 function DiscountForm({
   discount,
+  saving,
   onClose,
   onSave,
 }: {
-  discount: Discount | null
+  discount: AdminDiscount | null
+  saving: boolean
   onClose: () => void
-  onSave: (values: DiscountFormValues) => void
+  onSave: (payload: DiscountCreatePayload) => void
 }) {
   const [values, setValues] = useState<DiscountFormValues>(() =>
     discount
@@ -194,35 +243,47 @@ function DiscountForm({
           code: discount.code,
           discount_type: discount.discount_type,
           value: discount.value,
-          max_uses: discount.max_uses,
-          min_order_cents: discount.min_order_cents,
-          expires_at: discount.expires_at.slice(0, 10),
+          max_uses: discount.max_uses !== null ? String(discount.max_uses) : '',
+          min_order_cents: discount.min_order_cents !== null ? String(discount.min_order_cents) : '',
+          expires_at: discount.expires_at ? discount.expires_at.slice(0, 10) : '',
+          is_active: discount.is_active,
         }
       : {
           code: '',
           discount_type: 'percentage',
           value: 10,
-          max_uses: 100,
-          min_order_cents: 0,
+          max_uses: '100',
+          min_order_cents: '',
           expires_at: '',
+          is_active: true,
         },
   )
 
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    const payload: DiscountCreatePayload = {
+      code: values.code,
+      discount_type: values.discount_type,
+      value: values.value,
+      max_uses: values.max_uses ? Number(values.max_uses) : null,
+      min_order_cents: values.min_order_cents ? Number(values.min_order_cents) : null,
+      expires_at: values.expires_at ? `${values.expires_at}T23:59:59Z` : null,
+      is_active: values.is_active,
+    }
+    onSave(payload)
+  }
+
   return (
     <Modal open onClose={onClose} title={discount ? `Edit ${discount.code}` : 'Create discount'}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          onSave({ ...values, expires_at: `${values.expires_at}T23:59:59Z` })
-        }}
-        className="space-y-4"
-      >
+      <form onSubmit={submit} className="space-y-4">
         <Field
           label="Code"
           required
           hint="Customers type this at checkout. Uppercase, no spaces."
           value={values.code}
-          onChange={(e) => setValues((v) => ({ ...v, code: e.target.value.toUpperCase().replace(/\s/g, '') }))}
+          onChange={(e) =>
+            setValues((v) => ({ ...v, code: e.target.value.toUpperCase().replace(/\s/g, '') }))
+          }
         />
 
         <div>
@@ -235,7 +296,9 @@ function DiscountForm({
           <select
             id="discount-type"
             value={values.discount_type}
-            onChange={(e) => setValues((v) => ({ ...v, discount_type: e.target.value as DiscountType }))}
+            onChange={(e) =>
+              setValues((v) => ({ ...v, discount_type: e.target.value as 'percentage' | 'fixed' }))
+            }
             className="w-full rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 font-body-md text-body-md"
           >
             <option value="percentage">Percentage off</option>
@@ -262,34 +325,54 @@ function DiscountForm({
           <Field
             label="Max uses"
             type="number"
-            required
             min={1}
             value={values.max_uses}
-            onChange={(e) => setValues((v) => ({ ...v, max_uses: Number(e.target.value) }))}
+            hint={values.max_uses ? undefined : 'Leave blank for unlimited'}
+            onChange={(e) => setValues((v) => ({ ...v, max_uses: e.target.value }))}
           />
           <Field
             label="Min order (cents)"
             type="number"
             min={0}
             value={values.min_order_cents}
-            hint={values.min_order_cents === 0 ? 'No minimum' : formatPrice(values.min_order_cents)}
-            onChange={(e) => setValues((v) => ({ ...v, min_order_cents: Number(e.target.value) }))}
+            hint={
+              values.min_order_cents
+                ? formatPrice(Number(values.min_order_cents))
+                : 'Leave blank for no minimum'
+            }
+            onChange={(e) => setValues((v) => ({ ...v, min_order_cents: e.target.value }))}
           />
         </div>
 
         <Field
           label="Expires on"
           type="date"
-          required
           value={values.expires_at}
+          hint={values.expires_at ? undefined : 'Leave blank for no expiry'}
           onChange={(e) => setValues((v) => ({ ...v, expires_at: e.target.value }))}
         />
 
+        <label className="flex cursor-pointer items-center gap-3">
+          <input
+            type="checkbox"
+            checked={values.is_active}
+            onChange={(e) => setValues((v) => ({ ...v, is_active: e.target.checked }))}
+            className="h-4 w-4 rounded border-outline accent-primary"
+          />
+          <span className="font-body-md text-body-md text-on-surface">Active</span>
+        </label>
+
         <div className="flex flex-col gap-3 pt-2 sm:flex-row-reverse">
-          <AdminButton type="submit" className="flex-1">
-            {discount ? 'Save changes' : 'Create discount'}
+          <AdminButton type="submit" disabled={saving} className="flex-1">
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : discount ? (
+              'Save changes'
+            ) : (
+              'Create discount'
+            )}
           </AdminButton>
-          <AdminButton variant="secondary" className="flex-1" onClick={onClose}>
+          <AdminButton variant="secondary" className="flex-1" onClick={onClose} disabled={saving}>
             Cancel
           </AdminButton>
         </div>
