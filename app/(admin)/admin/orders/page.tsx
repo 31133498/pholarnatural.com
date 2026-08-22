@@ -17,9 +17,9 @@ import { listAdminOrders, updateOrderStatus, type AdminOrder } from '@/lib/api/a
 import { formatPrice, formatDateShort, formatDateLong } from '@/lib/format'
 
 /** The fulfilment pipeline, in order (doc §1.14.5). */
-const STATUS_FLOW = ['confirmed', 'processing', 'shipped', 'delivered'] as const
+const STATUS_FLOW = ['paid', 'confirmed', 'processing', 'shipped', 'delivered'] as const
 type PipelineStatus = (typeof STATUS_FLOW)[number]
-type Filter = 'all' | PipelineStatus | 'cancelled' | 'pending' | 'paid'
+type Filter = 'all' | PipelineStatus | 'cancelled' | 'pending'
 
 /** Order management (doc §1.14.5). */
 export default function AdminOrdersPage() {
@@ -63,7 +63,7 @@ export default function AdminOrdersPage() {
     }
   }
 
-  const filterOptions: Filter[] = ['all', 'pending', 'paid', ...STATUS_FLOW, 'cancelled']
+  const filterOptions: Filter[] = ['all', 'pending', ...STATUS_FLOW, 'cancelled']
 
   return (
     <>
@@ -258,10 +258,8 @@ function OrderModal({
             Fulfilment
           </h3>
           <ol className="mb-4 flex flex-wrap items-center gap-2">
-            {(['confirmed', 'processing', 'shipped', 'delivered'] as const).map((s, i) => {
-              const currentIndex = (['confirmed', 'processing', 'shipped', 'delivered'] as const).indexOf(
-                order.status as never,
-              )
+            {STATUS_FLOW.map((s, i) => {
+              const currentIndex = STATUS_FLOW.indexOf(order.status as PipelineStatus)
               const done = currentIndex >= i && currentIndex !== -1
               return (
                 <li key={s} className="flex items-center gap-2">
@@ -272,7 +270,7 @@ function OrderModal({
                   >
                     {s}
                   </span>
-                  {i < 3 && <span className="h-px w-4 bg-outline-variant" aria-hidden="true" />}
+                  {i < STATUS_FLOW.length - 1 && <span className="h-px w-4 bg-outline-variant" aria-hidden="true" />}
                 </li>
               )
             })}
