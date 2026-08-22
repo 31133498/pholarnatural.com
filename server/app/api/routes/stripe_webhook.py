@@ -20,9 +20,9 @@ async def stripe_webhook(
     Webhook path: POST /api/v1/webhooks/payments
 
     Handled events:
-      checkout.session.completed   → confirm order + stock decrement + WhatsApp new_order
-      payment_intent.succeeded     → confirm booking deposit + WhatsApp new_booking
-      payment_intent.payment_failed → mark booking payment_failed + WhatsApp payment_failed
+      checkout.session.completed    → confirm order + stock decrement + WhatsApp + email
+      payment_intent.succeeded      → confirm booking deposit + WhatsApp + email
+      payment_intent.payment_failed → mark booking payment_failed + WhatsApp
     """
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
@@ -40,7 +40,15 @@ async def stripe_webhook(
         metadata = session.get("metadata") or {}
 
         if metadata.get("type") == "product_order":
-            order_service.confirm_order_payment(db=db, session_id=session["id"])
+            from app.services.email import (  # noqa: PLC0415
+                send_email, send_admin_email,
+                order_confirmation_email, admin_order_notification_email,
+            )
+            order = order_service.confirm_order_payment(db=db, session_id=session["id"])
+            if order:
+                subj, html = order_confirmation_email(order)
+                send_email(order.customer_email, subj, html)
+                send_admin_email(*admin_order_notification_email(order))
 
     # ── Booking deposit paid via Payment Intent ────────────────────────────────
     elif event_type == "payment_intent.succeeded":
@@ -49,6 +57,10 @@ async def stripe_webhook(
 
         if metadata.get("type") == "booking_deposit":
             from app.services.whatsapp import notify, NotificationEvent  # noqa: PLC0415
+            from app.services.email import (  # noqa: PLC0415
+                send_email, send_admin_email,
+                booking_confirmation_email, admin_booking_notification_email,
+            )
 
             booking = booking_service.confirm_booking_payment_intent(
                 db=db, payment_intent_id=pi["id"]
@@ -57,6 +69,8 @@ async def stripe_webhook(
                 service_name = booking.service.name if booking.service else "Service"
                 booking_date = booking.booking_date.strftime("%a %d %b %Y")
                 start_time = booking.start_time.strftime("%I:%M %p").lstrip("0")
+
+                # WhatsApp — independent path
                 notify(
                     NotificationEvent.NEW_BOOKING,
                     f"📅 New Booking — PN-{str(booking.id)[:8].upper()}\n"
@@ -66,6 +80,11 @@ async def stripe_webhook(
                     f"pholarnatural.com/admin/bookings",
                     db,
                 )
+
+                # Email — independent path
+                subj, html = booking_confirmation_email(booking)
+                send_email(booking.customer_email, subj, html)
+                send_admin_email(*admin_booking_notification_email(booking))
 
     # ── Booking deposit payment failed ─────────────────────────────────────────
     elif event_type == "payment_intent.payment_failed":

@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Resend
     RESEND_API_KEY: Optional[str] = None
     DEFAULT_FROM_EMAIL: str = "onboarding@resend.dev"
+    ADMIN_EMAIL: Optional[str] = None
 
     # Evolution API (WhatsApp notifications via instance "pholar-notifier")
     EVOLUTION_API_KEY: Optional[str] = None
