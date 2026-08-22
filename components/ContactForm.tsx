@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Send, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Field, TextareaField } from '@/components/FormField'
+import { submitContact } from '@/lib/api/contact'
 
 type Errors = Partial<Record<'name' | 'email' | 'subject' | 'message', string>>
 
@@ -13,7 +14,8 @@ export default function ContactForm() {
   const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
   const [errors, setErrors] = useState<Errors>({})
-  const [status, setStatus] = useState<'idle' | 'sending' | 'sent'>('idle')
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   function validate() {
     const next: Errors = {}
@@ -31,9 +33,14 @@ export default function ContactForm() {
     e.preventDefault()
     if (!validate()) return
     setStatus('sending')
-    // Stands in for POST /api/contact (doc §3.2). Email delivery lands in week 3 (doc §5.2).
-    await new Promise((r) => setTimeout(r, 800))
-    setStatus('sent')
+    setSubmitError(null)
+    try {
+      await submitContact({ name, email, subject, message })
+      setStatus('sent')
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      setStatus('error')
+    }
   }
 
   if (status === 'sent') {
@@ -76,6 +83,16 @@ export default function ContactForm() {
         </p>
       )}
 
+      {status === 'error' && submitError && (
+        <p
+          role="alert"
+          className="flex items-center gap-2 rounded-xl bg-error-container p-4 font-body-md text-body-md text-on-error-container"
+        >
+          <AlertCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
+          {submitError}
+        </p>
+      )}
+
       <Field
         label="Your name"
         required
@@ -112,6 +129,7 @@ export default function ContactForm() {
       <button
         type="submit"
         disabled={status === 'sending'}
+        onClick={() => { if (status === 'error') setStatus('idle') }}
         className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-4 font-label-sm text-label-sm text-white transition-opacity hover:opacity-90 disabled:opacity-60"
       >
         {status === 'sending' ? (

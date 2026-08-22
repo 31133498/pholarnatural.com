@@ -63,6 +63,18 @@ class BlockedDateResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+# ----- CANCELLATION -----
+class BookingCancelRequest(BaseModel):
+    cancellation_reason: Optional[str] = None
+
+class BookingCancelResponse(BaseModel):
+    id: UUID
+    status: str
+    cancellation_reason: Optional[str]
+
+    model_config = {"from_attributes": True}
+
+
 # ----- ORDERS -----
 class OrderStatusUpdate(BaseModel):
     status: str # e.g., "shipped", "delivered", "cancelled"

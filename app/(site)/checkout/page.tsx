@@ -4,13 +4,14 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { Lock, CreditCard, AlertCircle, ArrowLeft, Loader2 } from 'lucide-react'
+import { Lock, CreditCard, AlertCircle, ArrowLeft, Loader2, Tag, X } from 'lucide-react'
 import { Field, FieldSet } from '@/components/FormField'
 import { useCart } from '@/context/CartContext'
 import { formatPrice } from '@/lib/format'
 import { CURRENCY } from '@/lib/config'
 import { lastOrder, makeOrderNumber, nowISO } from '@/lib/session-store'
 import { createOrder } from '@/lib/api/orders'
+import { validateDiscount } from '@/lib/api/discounts'
 import type { Order, ShippingAddress } from '@/lib/types'
 
 type Errors = Partial<Record<keyof ShippingAddress | 'email', string>>
@@ -41,6 +42,41 @@ export default function CheckoutPage() {
   const [errors, setErrors] = useState<Errors>({})
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+
+  // Discount code state
+  const [discountCode, setDiscountCode] = useState('')
+  const [discountValidating, setDiscountValidating] = useState(false)
+  const [discountError, setDiscountError] = useState<string | null>(null)
+  const [appliedDiscount, setAppliedDiscount] = useState<{
+    code: string
+    discount_cents: number
+    message: string
+  } | null>(null)
+
+  async function applyDiscount() {
+    const code = discountCode.trim()
+    if (!code) return
+    setDiscountValidating(true)
+    setDiscountError(null)
+    try {
+      const result = await validateDiscount(code, subtotalCents)
+      setAppliedDiscount({ code: result.code, discount_cents: result.discount_cents, message: result.message })
+      setDiscountCode('')
+    } catch (err) {
+      setDiscountError(err instanceof Error ? err.message : 'Invalid discount code.')
+    } finally {
+      setDiscountValidating(false)
+    }
+  }
+
+  function removeDiscount() {
+    setAppliedDiscount(null)
+    setDiscountError(null)
+  }
+
+  const discountedSubtotal = subtotalCents - (appliedDiscount?.discount_cents ?? 0)
+  const effectiveShippingCents = discountedSubtotal >= 5000 ? 0 : shippingCents
+  const effectiveTotalCents = discountedSubtotal + effectiveShippingCents
 
   const set = (key: keyof ShippingAddress) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setAddress((a) => ({ ...a, [key]: e.target.value }))
@@ -82,6 +118,7 @@ export default function CheckoutPage() {
           country: address.country,
         },
         items: items.map((i) => ({ variant_id: i.variant_id, quantity: i.quantity })),
+        discount_code: appliedDiscount?.code,
       })
 
       const orderId = response.id
@@ -214,6 +251,63 @@ export default function CheckoutPage() {
             </div>
           </FieldSet>
 
+          <FieldSet legend="Discount code">
+            {appliedDiscount ? (
+              <div className="flex items-center justify-between gap-4 rounded-xl border border-primary/40 bg-primary/5 px-4 py-3">
+                <div className="flex items-center gap-2 font-body-md text-body-md text-primary">
+                  <Tag className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>
+                    <strong>{appliedDiscount.code}</strong> — {appliedDiscount.message}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={removeDiscount}
+                  aria-label="Remove discount code"
+                  className="rounded-full p-1 text-on-surface-variant hover:text-primary"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <label htmlFor="discount-code" className="sr-only">Discount code</label>
+                <input
+                  id="discount-code"
+                  type="text"
+                  value={discountCode}
+                  onChange={(e) => { setDiscountCode(e.target.value); setDiscountError(null) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyDiscount() } }}
+                  placeholder="Enter code"
+                  className="min-w-0 flex-1 rounded-xl border border-outline bg-surface-container-lowest px-4 py-3 font-body-md text-body-md text-on-surface placeholder:text-on-surface-variant/50 focus:border-primary focus:outline-none"
+                  aria-describedby={discountError ? 'discount-error' : undefined}
+                />
+                <button
+                  type="button"
+                  onClick={applyDiscount}
+                  disabled={discountValidating || !discountCode.trim()}
+                  className="flex items-center gap-2 rounded-xl bg-secondary px-5 py-3 font-label-sm text-label-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {discountValidating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    'Apply'
+                  )}
+                </button>
+              </div>
+            )}
+            {discountError && (
+              <p
+                id="discount-error"
+                role="alert"
+                className="flex items-center gap-2 font-body-md text-[13px] text-error"
+              >
+                <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {discountError}
+              </p>
+            )}
+          </FieldSet>
+
           <FieldSet legend="Payment">
             {/*
               Placeholder only. Stripe Elements is mounted here in week 3 (doc §5.1) once the
@@ -263,13 +357,22 @@ export default function CheckoutPage() {
               <dt className="text-on-surface-variant">Subtotal</dt>
               <dd className="text-on-surface">{formatPrice(subtotalCents)}</dd>
             </div>
+            {appliedDiscount && (
+              <div className="flex justify-between font-body-md text-body-md text-primary">
+                <dt className="flex items-center gap-1">
+                  <Tag className="h-3.5 w-3.5" aria-hidden="true" />
+                  {appliedDiscount.code}
+                </dt>
+                <dd>−{formatPrice(appliedDiscount.discount_cents)}</dd>
+              </div>
+            )}
             <div className="flex justify-between font-body-md text-body-md">
               <dt className="text-on-surface-variant">Shipping</dt>
-              <dd className="text-on-surface">{shippingCents === 0 ? 'Free' : formatPrice(shippingCents)}</dd>
+              <dd className="text-on-surface">{effectiveShippingCents === 0 ? 'Free' : formatPrice(effectiveShippingCents)}</dd>
             </div>
             <div className="flex justify-between border-t border-outline-variant pt-3 font-headline-md text-headline-md">
               <dt className="text-primary">Total</dt>
-              <dd className="text-primary">{formatPrice(totalCents)}</dd>
+              <dd className="text-primary">{formatPrice(effectiveTotalCents)}</dd>
             </div>
           </dl>
 

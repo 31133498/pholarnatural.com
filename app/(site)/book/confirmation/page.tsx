@@ -4,8 +4,9 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { useHydrated } from '@/lib/use-hydrated'
 import { motion, useReducedMotion } from 'motion/react'
-import { Check, CalendarDays, Mail, Clock, ArrowRight } from 'lucide-react'
+import { Check, CalendarDays, Mail, Clock, ArrowRight, AlertCircle, Loader2, XCircle } from 'lucide-react'
 import { lastBooking } from '@/lib/session-store'
+import { cancelBooking } from '@/lib/api/bookings'
 import { formatPrice, formatDateLong, formatTime } from '@/lib/format'
 import { CANCELLATION_POLICY, BUSINESS, CURRENCY } from '@/lib/config'
 import type { Booking } from '@/lib/types'
@@ -21,6 +22,22 @@ export default function BookingConfirmationPage() {
   )
   const loaded = useHydrated()
   const reduced = useReducedMotion()
+
+  const [cancelStatus, setCancelStatus] = useState<'idle' | 'confirming' | 'cancelling' | 'cancelled'>('idle')
+  const [cancelError, setCancelError] = useState<string | null>(null)
+
+  async function handleCancel() {
+    if (!booking) return
+    setCancelStatus('cancelling')
+    setCancelError(null)
+    try {
+      await cancelBooking(booking.id, 'Customer requested cancellation')
+      setCancelStatus('cancelled')
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : 'Could not cancel the booking. Please contact us directly.')
+      setCancelStatus('idle')
+    }
+  }
 
   if (!loaded) return <div className="mx-auto max-w-3xl px-5 py-24" aria-busy="true" />
 
@@ -111,6 +128,71 @@ export default function BookingConfirmationPage() {
           .
         </p>
       </section>
+
+      {/* Cancel booking */}
+      {cancelStatus === 'cancelled' ? (
+        <div
+          role="status"
+          className="mt-8 rounded-2xl border border-outline-variant bg-surface-container-low p-6 text-center"
+        >
+          <XCircle className="mx-auto mb-3 h-10 w-10 text-on-surface-variant" aria-hidden="true" />
+          <p className="font-body-md text-body-md font-semibold text-on-surface">Booking cancelled</p>
+          <p className="mt-1 font-body-md text-[13px] text-on-surface-variant">
+            We&apos;ve recorded the cancellation. Refund eligibility is subject to the{' '}
+            <Link href="/refund-policy" className="underline underline-offset-2">refund policy</Link>.
+          </p>
+        </div>
+      ) : cancelStatus === 'confirming' ? (
+        <div className="mt-8 rounded-2xl border border-outline-variant bg-surface-container-low p-6">
+          <p className="mb-4 font-body-md text-body-md font-semibold text-on-surface">
+            Cancel this booking?
+          </p>
+          <p className="mb-6 font-body-md text-[13px] text-on-surface-variant">
+            Cancel within {CANCELLATION_POLICY.fullRefundWithinMinutes} min of booking for a full
+            refund. After that, the deposit may be forfeited — see the{' '}
+            <Link href="/refund-policy" className="underline underline-offset-2">refund policy</Link>.
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="flex items-center gap-2 rounded-full bg-error px-6 py-3 font-label-sm text-label-sm text-white transition-opacity hover:opacity-90"
+            >
+              Yes, cancel booking
+            </button>
+            <button
+              type="button"
+              onClick={() => setCancelStatus('idle')}
+              className="rounded-full border border-outline px-6 py-3 font-label-sm text-label-sm text-on-surface-variant transition-colors hover:bg-surface-container-high"
+            >
+              Keep booking
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-8 text-center">
+          {cancelError && (
+            <p
+              role="alert"
+              className="mb-4 flex items-center justify-center gap-2 font-body-md text-[13px] text-error"
+            >
+              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {cancelError}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => setCancelStatus('confirming')}
+            disabled={cancelStatus === 'cancelling'}
+            className="inline-flex items-center gap-2 font-body-md text-[13px] text-on-surface-variant underline underline-offset-2 hover:text-primary disabled:opacity-50"
+          >
+            {cancelStatus === 'cancelling' && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            )}
+            Need to cancel?
+          </button>
+        </div>
+      )}
 
       <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
         <Link

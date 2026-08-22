@@ -140,6 +140,22 @@ def create_booking_phase2(db: Session, booking_in: BookingCreate):
     return db_booking
 
 
+def cancel_booking(db: Session, booking_id: UUID, cancellation_reason: Optional[str] = None):
+    """Cancel a booking by ID, storing an optional reason."""
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found.")
+    if booking.status == "cancelled":
+        raise HTTPException(status_code=400, detail="This booking is already cancelled.")
+    if booking.status == "completed":
+        raise HTTPException(status_code=400, detail="Completed bookings cannot be cancelled.")
+    booking.status = "cancelled"
+    booking.cancellation_reason = cancellation_reason
+    db.commit()
+    db.refresh(booking)
+    return booking
+
+
 def block_date(db: Session, block_in: BlockedDateCreate):
     """Block a specific date so customers cannot book it."""
     # Check if already blocked

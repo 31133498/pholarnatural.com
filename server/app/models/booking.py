@@ -27,9 +27,10 @@ class Booking(Base):
     
     # Payment & Status
     # Valid statuses: pending, confirmed, cancelled, completed
-    status = Column(String(50), default="pending", index=True) 
+    status = Column(String(50), default="pending", index=True)
     deposit_cents = Column(Integer, nullable=False)
     stripe_session_id = Column(String(255), nullable=True, unique=True)
+    cancellation_reason = Column(String(255), nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

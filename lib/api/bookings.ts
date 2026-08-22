@@ -40,6 +40,12 @@ export interface BookingCreateResponse {
   end_time: string
 }
 
+export interface BookingCancelResponse {
+  id: string
+  status: string
+  cancellation_reason: string | null
+}
+
 // ─── Public functions ─────────────────────────────────────────────────────────
 
 export async function getBlockedDates(): Promise<string[]> {
@@ -66,5 +72,15 @@ export async function createBooking(payload: BookingPayload): Promise<BookingCre
       // Pydantic time field expects HH:MM:SS
       start_time: payload.start_time.length === 5 ? `${payload.start_time}:00` : payload.start_time,
     },
+  })
+}
+
+export async function cancelBooking(
+  bookingId: string,
+  reason?: string,
+): Promise<BookingCancelResponse> {
+  return apiClient<BookingCancelResponse>(`/api/v1/bookings/${bookingId}/cancel`, {
+    method: 'POST',
+    body: { cancellation_reason: reason ?? null },
   })
 }

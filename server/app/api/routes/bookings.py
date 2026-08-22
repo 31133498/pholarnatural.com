@@ -6,9 +6,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
+from uuid import UUID
+
 from app.schemas.booking import (
     BlockedDateResponse,
     BookingCreate,
+    BookingCancelRequest,
+    BookingCancelResponse,
     BookingCreateResponse,
     SlotsResponse,
     SlotInfo,
@@ -42,3 +46,17 @@ def get_slots(
 def create_booking(booking_in: BookingCreate, db: Session = Depends(get_db)):
     """Create a pending booking (Phase 2 — no Stripe payment required)."""
     return booking_service.create_booking_phase2(db=db, booking_in=booking_in)
+
+
+@router.post("/{booking_id}/cancel", response_model=BookingCancelResponse)
+def cancel_booking(
+    booking_id: UUID,
+    cancel_in: BookingCancelRequest,
+    db: Session = Depends(get_db),
+):
+    """Cancel a booking and store an optional cancellation reason."""
+    return booking_service.cancel_booking(
+        db=db,
+        booking_id=booking_id,
+        cancellation_reason=cancel_in.cancellation_reason,
+    )

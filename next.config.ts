@@ -15,7 +15,13 @@ const nextConfig: NextConfig = {
      * to WebP), so no remote hosts are permitted. Re-add a pattern here only if a CDN is
      * introduced later.
      */
-    remotePatterns: [],
+    remotePatterns: [
+      {
+        // Cloudinary — product/service images uploaded via the admin panel
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+      },
+    ],
     formats: ["image/avif", "image/webp"],
   },
 };
