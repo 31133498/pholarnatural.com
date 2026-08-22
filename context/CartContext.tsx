@@ -36,6 +36,8 @@ function keyFor(productId: string, variantId: string) {
   return `${productId}:${variantId}`
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /** Discards anything that does not look like a CartItem, so a stale or hand-edited key cannot crash the app. */
 function parseStored(raw: string | null): CartItem[] {
   if (!raw) return []
@@ -48,6 +50,8 @@ function parseStored(raw: string | null): CartItem[] {
         typeof i === 'object' &&
         typeof (i as CartItem).key === 'string' &&
         typeof (i as CartItem).variant_id === 'string' &&
+        // Pre-API static data used slugs like "var_oil_30"; the backend requires real UUIDs.
+        UUID_RE.test((i as CartItem).variant_id) &&
         typeof (i as CartItem).unit_price_cents === 'number' &&
         typeof (i as CartItem).quantity === 'number' &&
         (i as CartItem).quantity > 0,
