@@ -70,7 +70,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen bg-surface-container-low">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 shrink-0 border-r border-outline-variant bg-surface-container-lowest transition-transform lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 w-64 shrink-0 border-r border-outline-variant bg-surface-container-lowest transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
