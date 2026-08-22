@@ -13,12 +13,14 @@ run multiple times without creating duplicates.
 import sys
 import uuid
 import os
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(__file__))
 
 from app.db.database import SessionLocal
 from app.models.product import Product, ProductVariant, ProductImage
 from app.models.service import Service
+from app.models.order import Discount
 from sqlalchemy.orm import Session
 
 
@@ -78,6 +80,27 @@ PRODUCTS = [
             {"url": "/images/products/gallery-thumb-2.webp",                "alt": "Detail of the Botanical Cleanse Shampoo pump",                    "sort_order": 2},
             {"url": "/images/products/gallery-thumb-3.webp",                "alt": "Botanical Cleanse Shampoo styled in a bathroom setting",          "sort_order": 3},
         ],
+    },
+]
+
+DISCOUNTS = [
+    {
+        "code": "WELCOME10",
+        "discount_type": "percentage",
+        "value": 10,
+        "max_uses": 500,
+        "min_order_cents": 3_000,
+        "expires_at": datetime(2026, 12, 31, 23, 59, 59, tzinfo=timezone.utc),
+        "is_active": True,
+    },
+    {
+        "code": "SAVE15",
+        "discount_type": "percentage",
+        "value": 15,
+        "max_uses": 200,
+        "min_order_cents": 5_000,
+        "expires_at": None,
+        "is_active": True,
     },
 ]
 
@@ -182,6 +205,16 @@ def seed_products(db: Session) -> None:
     db.commit()
 
 
+def seed_discounts(db: Session) -> None:
+    for d_data in DISCOUNTS:
+        if db.query(Discount).filter(Discount.code == d_data["code"]).first():
+            print(f"  [skip] {d_data['code']} — already exists")
+            continue
+        db.add(Discount(id=uuid.uuid4(), used_count=0, **d_data))
+        print(f"  [ok]   {d_data['code']} — {d_data['value']}{'%' if d_data['discount_type'] == 'percentage' else '¢'} off")
+    db.commit()
+
+
 def seed_services(db: Session) -> None:
     for s_data in SERVICES:
         if db.query(Service).filter(Service.slug == s_data["slug"]).first():
@@ -207,6 +240,9 @@ def main() -> None:
 
         print("\nServices:")
         seed_services(db)
+
+        print("\nDiscounts:")
+        seed_discounts(db)
 
         print("\nDone.")
     except Exception as exc:
