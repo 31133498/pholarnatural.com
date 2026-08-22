@@ -1,43 +1,70 @@
 import stripe
-from app.services.payment_gateway import PaymentGateway
+from typing import Any, Dict, Optional
+
 from app.core.config import settings
-from typing import Dict, Any
+from app.services.payment_gateway import PaymentGateway
+
 
 class StripeGateway(PaymentGateway):
-    def __init__(self):
+    def __init__(self) -> None:
         stripe.api_key = settings.STRIPE_SECRET_KEY
         self.webhook_secret = settings.STRIPE_WEBHOOK_SECRET
 
     def create_checkout_session(
-        self, 
+        self,
         line_items: list[Dict[str, Any]],
-        success_url: str, 
-        cancel_url: str, 
+        success_url: str,
+        cancel_url: str,
         metadata: Dict[str, str],
-        customer_email: str = None
+        customer_email: Optional[str] = None,
     ) -> Dict[str, Any]:
-        
-        session_params = {
-            "payment_method_types": ['card'],
+        params: Dict[str, Any] = {
+            "payment_method_types": ["card"],
             "line_items": line_items,
-            "mode": 'payment',
+            "mode": "payment",
             "success_url": success_url,
             "cancel_url": cancel_url,
-            "metadata": metadata
+            "metadata": metadata,
         }
-
         if customer_email:
-            session_params["customer_email"] = customer_email
+            params["customer_email"] = customer_email
 
-        session = stripe.checkout.Session.create(**session_params)
-        
-        return {
-            "session_id": session.id,
-            "url": session.url
+        session = stripe.checkout.Session.create(**params)
+        return {"session_id": session.id, "url": session.url}
+
+    def create_payment_intent(
+        self,
+        amount_cents: int,
+        currency: str,
+        metadata: Dict[str, str],
+        customer_email: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {
+            "amount": amount_cents,
+            "currency": currency,
+            "metadata": metadata,
+            "automatic_payment_methods": {"enabled": True},
         }
+        if customer_email:
+            params["receipt_email"] = customer_email
+
+        pi = stripe.PaymentIntent.create(**params)
+        return {"payment_intent_id": pi.id, "client_secret": pi.client_secret}
+
+    def create_refund(
+        self,
+        payment_intent_id: str,
+        amount_cents: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {"payment_intent": payment_intent_id}
+        if amount_cents is not None:
+            params["amount"] = amount_cents
+
+        refund = stripe.Refund.create(**params)
+        return {"refund_id": refund.id, "status": refund.status}
 
     def verify_webhook_signature(self, payload: bytes, signature: str) -> Dict[str, Any]:
-        """Throws a ValueError or stripe.error.SignatureVerificationError if invalid."""
+        """Raises stripe.error.SignatureVerificationError if the signature is invalid."""
         return stripe.Webhook.construct_event(
             payload, signature, self.webhook_secret
         )

@@ -31,9 +31,6 @@ class NotificationEvent(str, Enum):
     NEW_ORDER = "new_order"
     NEW_BOOKING = "new_booking"
     BOOKING_CANCELLED = "booking_cancelled"
-    # NOTE: PAYMENT_FAILED defaults OFF until Phase 9 (Stripe) is live.
-    # Flip _DEFAULT_ON[PAYMENT_FAILED] to True and wire notify() into the
-    # Stripe webhook when going live.
     PAYMENT_FAILED = "payment_failed"
     NEW_CONTACT_MESSAGE = "new_contact_message"
     LOW_STOCK = "low_stock"
@@ -51,14 +48,13 @@ _TOGGLE_KEY: dict[NotificationEvent, str] = {
 }
 
 # Default when the key has never been saved to admin_settings.
-# Confirmed with user 2026-08-22:
-#   ON  — new_order, new_booking, booking_cancelled, new_contact_message, low_stock
-#   OFF — payment_failed (Phase 9), discount_maxed_out
+#   ON  — new_order, new_booking, booking_cancelled, new_contact_message, low_stock, payment_failed
+#   OFF — discount_maxed_out
 _DEFAULT_ON: dict[NotificationEvent, bool] = {
     NotificationEvent.NEW_ORDER: True,
     NotificationEvent.NEW_BOOKING: True,
     NotificationEvent.BOOKING_CANCELLED: True,
-    NotificationEvent.PAYMENT_FAILED: False,
+    NotificationEvent.PAYMENT_FAILED: True,  # Phase 9: Stripe live — default flipped ON
     NotificationEvent.NEW_CONTACT_MESSAGE: True,
     NotificationEvent.LOW_STOCK: True,
     NotificationEvent.DISCOUNT_MAXED_OUT: False,

@@ -53,6 +53,14 @@ class OrderCreateResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
+class OrderCheckoutResponse(BaseModel):
+    """Phase 9: Stripe Checkout Session created — redirect the customer to checkout_url."""
+    order_id: UUID
+    checkout_url: str
+    total_cents: int
+    status: str
+
 class BlockedDateCreate(BaseModel):
     date: date
     reason: Optional[str] = None

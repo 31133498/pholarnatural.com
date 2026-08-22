@@ -254,6 +254,118 @@ def calculate_cart_and_checkout(db: Session, order_in: OrderCreate, payment_gate
         db.commit()
         raise HTTPException(status_code=500, detail=str(e))
 
+def create_order_checkout(db: Session, order_in: OrderCreate, payment_gateway: PaymentGateway):
+    """
+    Phase 9: validate cart, create a pending Order row, then open a Stripe
+    Checkout Session (single CAD line item to avoid negative-amount restrictions).
+    Returns (db_order, checkout_url).
+    """
+    variant_ids = [item.variant_id for item in order_in.items]
+    variants = db.query(ProductVariant).join(Product).filter(
+        ProductVariant.id.in_(variant_ids),
+        ProductVariant.is_active == True,
+        Product.is_active == True,
+    ).all()
+    variant_map = {v.id: v for v in variants}
+
+    subtotal_cents = 0
+    db_order_items = []
+    item_descriptions = []
+    for cart_item in order_in.items:
+        variant = variant_map.get(cart_item.variant_id)
+        if not variant:
+            raise HTTPException(status_code=400, detail=f"Variant {cart_item.variant_id} is invalid or inactive.")
+        if variant.stock_count < cart_item.quantity:
+            raise HTTPException(status_code=400, detail=f"Not enough stock for {variant.product.name}.")
+        line_total = variant.price_cents * cart_item.quantity
+        subtotal_cents += line_total
+        db_order_items.append(OrderItem(
+            product_variant_id=variant.id,
+            product_name=variant.product.name,
+            variant_label=variant.weight_label,
+            quantity=cart_item.quantity,
+            unit_price_cents=variant.price_cents,
+        ))
+        item_descriptions.append(
+            f"{cart_item.quantity}× {variant.product.name} ({variant.weight_label})"
+        )
+
+    discount_cents = 0
+    db_discount = None
+    if order_in.discount_code:
+        db_discount = db.query(Discount).filter(
+            Discount.code == order_in.discount_code.upper(),
+            Discount.is_active == True,
+        ).first()
+        if not db_discount:
+            raise HTTPException(status_code=400, detail="Invalid discount code.")
+        if db_discount.expires_at and db_discount.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Discount code expired.")
+        if db_discount.max_uses and db_discount.used_count >= db_discount.max_uses:
+            raise HTTPException(status_code=400, detail="Discount code usage limit reached.")
+        if db_discount.min_order_cents and subtotal_cents < db_discount.min_order_cents:
+            raise HTTPException(status_code=400, detail="Order minimum not met for this code.")
+        if db_discount.discount_type == "percentage":
+            discount_cents = int(subtotal_cents * (db_discount.value / 100))
+        elif db_discount.discount_type == "fixed":
+            discount_cents = db_discount.value
+        discount_cents = min(discount_cents, subtotal_cents)
+
+    discounted_subtotal = subtotal_cents - discount_cents
+    shipping_cents = 0 if discounted_subtotal >= FREE_SHIPPING_THRESHOLD_CENTS else STANDARD_SHIPPING_CENTS
+    total_cents = discounted_subtotal + shipping_cents
+
+    db_order = Order(
+        customer_name=order_in.customer_name,
+        customer_email=order_in.customer_email,
+        shipping_address=order_in.shipping_address.model_dump(),
+        subtotal_cents=subtotal_cents,
+        shipping_cents=shipping_cents,
+        discount_cents=discount_cents,
+        total_cents=total_cents,
+        status="pending",
+        discount_id=db_discount.id if db_discount else None,
+        items=db_order_items,
+    )
+    db.add(db_order)
+    db.flush()  # get ID before the Stripe call
+
+    description = ", ".join(item_descriptions)
+    if discount_cents and db_discount:
+        description += f" — {db_discount.code} applied"
+    if shipping_cents:
+        description += f" + CAD ${shipping_cents / 100:.2f} shipping"
+
+    stripe_line_items = [{
+        "price_data": {
+            "currency": "cad",
+            "unit_amount": total_cents,
+            "product_data": {
+                "name": "Pholar Natural Order",
+                "description": description,
+            },
+        },
+        "quantity": 1,
+    }]
+
+    try:
+        session_data = payment_gateway.create_checkout_session(
+            line_items=stripe_line_items,
+            success_url=f"{settings.DOMAIN}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{settings.DOMAIN}/cart",
+            metadata={"order_id": str(db_order.id), "type": "product_order"},
+            customer_email=order_in.customer_email,
+        )
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=f"Stripe checkout failed: {exc}")
+
+    db_order.stripe_session_id = session_data["session_id"]
+    db.commit()
+    db.refresh(db_order)
+    return db_order, session_data["url"]
+
+
 def confirm_order_payment(db: Session, session_id: str):
     """Called by Stripe webhook to finalize the order."""
     # Local imports avoid loading whatsapp/settings at module startup.
@@ -267,7 +379,9 @@ def confirm_order_payment(db: Session, session_id: str):
         low_stock_threshold = int(get_setting(db, "low_stock_threshold", "5"))
 
         # Decrement stock for each item; fire low_stock alert if threshold crossed.
+        item_count = 0
         for item in order.items:
+            item_count += item.quantity
             variant = db.query(ProductVariant).filter(ProductVariant.id == item.product_variant_id).first()
             if variant:
                 variant.stock_count = max(0, variant.stock_count - item.quantity)
@@ -297,6 +411,17 @@ def confirm_order_payment(db: Session, session_id: str):
                         f"pholarnatural.com/admin/discounts",
                         db,
                     )
+
+        # Fire new_order alert here — after payment confirmed, not at order creation.
+        order_number = f"PN-{str(order.id)[:8].upper()}"
+        notify(
+            NotificationEvent.NEW_ORDER,
+            f"🛍️ New Order — {order_number}\n"
+            f"Customer: {order.customer_name} · {item_count} item{'s' if item_count != 1 else ''}\n"
+            f"Total: CAD ${order.total_cents / 100:.2f}\n"
+            f"pholarnatural.com/admin/orders",
+            db,
+        )
 
         db.commit()
         return order

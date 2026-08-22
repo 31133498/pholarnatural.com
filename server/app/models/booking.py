@@ -26,10 +26,12 @@ class Booking(Base):
     end_time = Column(Time, nullable=False)
     
     # Payment & Status
-    # Valid statuses: pending, confirmed, cancelled, completed
+    # Valid statuses: pending, confirmed, cancelled, completed, payment_failed
     status = Column(String(50), default="pending", index=True)
     deposit_cents = Column(Integer, nullable=False)
     stripe_session_id = Column(String(255), nullable=True, unique=True)
+    # Phase 9: Payment Intent ID for booking deposit (inline Payment Element flow)
+    stripe_payment_intent_id = Column(String(255), nullable=True, unique=True)
     cancellation_reason = Column(String(255), nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())

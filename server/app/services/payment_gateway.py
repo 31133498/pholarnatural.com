@@ -1,31 +1,51 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Any, Dict, Optional
+
 
 class PaymentGateway(ABC):
-    """
-    Abstract Base Class defining the contract for any payment gateway 
-    we use (Stripe, PayPal, Flutterwave, etc.)
-    """
+    """Abstract contract for any payment provider (Stripe, etc.)."""
 
     @abstractmethod
     def create_checkout_session(
-        self, 
+        self,
         line_items: list[Dict[str, Any]],
-        success_url: str, 
-        cancel_url: str, 
+        success_url: str,
+        cancel_url: str,
         metadata: Dict[str, str],
-        customer_email: str = None
+        customer_email: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Creates a checkout session and returns a dictionary containing 
-        at least 'session_id' and 'url'.
+        Create a hosted Checkout Session.
+        Returns at least {"session_id": str, "url": str}.
         """
-        pass
+
+    @abstractmethod
+    def create_payment_intent(
+        self,
+        amount_cents: int,
+        currency: str,
+        metadata: Dict[str, str],
+        customer_email: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a Payment Intent for inline Payment Element flows.
+        Returns {"payment_intent_id": str, "client_secret": str}.
+        """
+
+    @abstractmethod
+    def create_refund(
+        self,
+        payment_intent_id: str,
+        amount_cents: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Refund a Payment Intent in full (or partially if amount_cents given).
+        Returns {"refund_id": str, "status": str}. Raises on failure.
+        """
 
     @abstractmethod
     def verify_webhook_signature(self, payload: bytes, signature: str) -> Dict[str, Any]:
         """
-        Verifies the incoming webhook signature to ensure it came from the payment provider.
-        Returns the parsed event object.
+        Verify webhook signature and return the parsed Stripe event dict.
+        Raises on invalid signature.
         """
-        pass

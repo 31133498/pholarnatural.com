@@ -139,8 +139,128 @@ def create_booking_phase2(db: Session, booking_in: BookingCreate):
     return db_booking
 
 
-def cancel_booking(db: Session, booking_id: UUID, cancellation_reason: Optional[str] = None):
-    """Cancel a booking by ID, storing an optional reason."""
+def create_booking_with_payment_intent(
+    db: Session,
+    booking_in: BookingCreate,
+    payment_gateway: PaymentGateway,
+):
+    """
+    Phase 9: validate availability, create a pending Booking row, then open a
+    Stripe Payment Intent for the 10% deposit (inline Payment Element flow).
+    Returns (db_booking, client_secret).
+    """
+    service = db.query(Service).filter(
+        Service.id == booking_in.service_id,
+        Service.is_active == True,
+    ).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found.")
+
+    today = datetime.now(timezone.utc).date()
+    if booking_in.booking_date < today:
+        raise HTTPException(status_code=400, detail="Cannot book a date in the past.")
+    if booking_in.booking_date.weekday() == 6:
+        raise HTTPException(status_code=400, detail="We are closed on Sundays.")
+
+    slot_str = booking_in.start_time.strftime("%H:%M")
+    if slot_str not in SLOT_TIMES:
+        raise HTTPException(status_code=400, detail=f"Invalid time slot: {slot_str}.")
+
+    end_time = check_availability(
+        db=db,
+        booking_date=booking_in.booking_date,
+        start_time=booking_in.start_time,
+        duration_minutes=service.duration_minutes,
+    )
+
+    deposit_cents = int(service.price_cents * DEPOSIT_RATE)
+    db_booking = Booking(
+        service_id=service.id,
+        customer_name=booking_in.customer_name,
+        customer_email=booking_in.customer_email,
+        customer_phone=booking_in.customer_phone,
+        booking_date=booking_in.booking_date,
+        start_time=booking_in.start_time,
+        end_time=end_time,
+        status="pending",
+        deposit_cents=deposit_cents,
+    )
+    db.add(db_booking)
+    db.flush()  # get ID before calling Stripe
+
+    try:
+        pi_data = payment_gateway.create_payment_intent(
+            amount_cents=deposit_cents,
+            currency="cad",
+            metadata={
+                "booking_id": str(db_booking.id),
+                "type": "booking_deposit",
+            },
+            customer_email=booking_in.customer_email,
+        )
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=f"Payment setup failed: {exc}")
+
+    db_booking.stripe_payment_intent_id = pi_data["payment_intent_id"]
+    db.commit()
+    db.refresh(db_booking)
+    return db_booking, pi_data["client_secret"]
+
+
+def confirm_booking_payment_intent(db: Session, payment_intent_id: str):
+    """
+    Called by webhook when payment_intent.succeeded — marks booking confirmed.
+    Eagerly loads the service so the caller can compose a WhatsApp message.
+    Returns the booking or None if not found / already confirmed.
+    """
+    booking = (
+        db.query(Booking)
+        .options(joinedload(Booking.service))
+        .filter(Booking.stripe_payment_intent_id == payment_intent_id)
+        .first()
+    )
+    if booking and booking.status == "pending":
+        booking.status = "confirmed"
+        db.commit()
+        db.refresh(booking)
+        return booking
+    return None
+
+
+def fail_booking_payment(db: Session, payment_intent_id: str):
+    """
+    Called by webhook when payment_intent.payment_failed — marks the booking
+    payment_failed so the slot is freed and the admin is notified.
+    Returns the booking or None if not found.
+    """
+    booking = (
+        db.query(Booking)
+        .options(joinedload(Booking.service))
+        .filter(Booking.stripe_payment_intent_id == payment_intent_id)
+        .first()
+    )
+    if booking and booking.status == "pending":
+        booking.status = "payment_failed"
+        db.commit()
+        db.refresh(booking)
+        return booking
+    return None
+
+
+def cancel_booking(
+    db: Session,
+    booking_id: UUID,
+    cancellation_reason: Optional[str] = None,
+    payment_gateway: Optional[PaymentGateway] = None,
+):
+    """
+    Cancel a booking by ID, storing an optional reason.
+    When payment_gateway is provided and the booking has a Payment Intent:
+      - Within 30 minutes of creation → full refund via Stripe.
+      - Outside that window → cancel without refund.
+    Returns (booking, refunded: bool, refund_policy_message: str).
+    """
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
@@ -148,11 +268,36 @@ def cancel_booking(db: Session, booking_id: UUID, cancellation_reason: Optional[
         raise HTTPException(status_code=400, detail="This booking is already cancelled.")
     if booking.status == "completed":
         raise HTTPException(status_code=400, detail="Completed bookings cannot be cancelled.")
+
+    refunded = False
+    refund_message = ""
+
+    if payment_gateway and booking.stripe_payment_intent_id:
+        created = booking.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        age = datetime.now(timezone.utc) - created
+
+        if age <= timedelta(minutes=30):
+            try:
+                payment_gateway.create_refund(booking.stripe_payment_intent_id)
+                refunded = True
+                refund_message = (
+                    "Your deposit has been fully refunded and will appear in 5–10 business days."
+                )
+            except Exception as exc:
+                raise HTTPException(status_code=502, detail=f"Refund failed: {exc}")
+        else:
+            refund_message = (
+                "The 30-minute free cancellation window has passed. "
+                "Your deposit is non-refundable."
+            )
+
     booking.status = "cancelled"
     booking.cancellation_reason = cancellation_reason
     db.commit()
     db.refresh(booking)
-    return booking
+    return booking, refunded, refund_message
 
 
 def block_date(db: Session, block_in: BlockedDateCreate):

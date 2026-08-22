@@ -1,28 +1,33 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
-from app.schemas.order import OrderCreate, OrderCreateResponse
+from app.api.dependencies import get_db, get_payment_gateway
+from app.schemas.order import OrderCreate, OrderCheckoutResponse
 from app.services import order_service
-from app.services.whatsapp import notify, NotificationEvent
+from app.services.payment_gateway import PaymentGateway
 
 router = APIRouter()
 
 
-@router.post("/", response_model=OrderCreateResponse, status_code=201)
-def create_order(order_in: OrderCreate, db: Session = Depends(get_db)):
-    """Create a pending order (Phase 2 — no Stripe payment required)."""
-    order = order_service.create_order_phase2(db=db, order_in=order_in)
-
-    order_number = f"PN-{str(order.id)[:8].upper()}"
-    item_count = sum(ci.quantity for ci in order_in.items)
-    notify(
-        NotificationEvent.NEW_ORDER,
-        f"🛍️ New Order — {order_number}\n"
-        f"Customer: {order.customer_name} · {item_count} item{'s' if item_count != 1 else ''}\n"
-        f"Total: CAD ${order.total_cents / 100:.2f}\n"
-        f"pholarnatural.com/admin/orders",
-        db,
+@router.post("/", response_model=OrderCheckoutResponse, status_code=201)
+def create_order(
+    order_in: OrderCreate,
+    db: Session = Depends(get_db),
+    payment_gateway: PaymentGateway = Depends(get_payment_gateway),
+):
+    """
+    Create a pending order and open a Stripe Checkout Session.
+    Returns the checkout_url — redirect the customer there to pay.
+    WhatsApp new_order alert fires after payment is confirmed via webhook.
+    """
+    db_order, checkout_url = order_service.create_order_checkout(
+        db=db,
+        order_in=order_in,
+        payment_gateway=payment_gateway,
     )
-
-    return order
+    return OrderCheckoutResponse(
+        order_id=db_order.id,
+        checkout_url=checkout_url,
+        total_cents=db_order.total_cents,
+        status=db_order.status,
+    )

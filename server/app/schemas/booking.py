@@ -67,10 +67,24 @@ class BlockedDateResponse(BaseModel):
 class BookingCancelRequest(BaseModel):
     cancellation_reason: Optional[str] = None
 
+class BookingDepositResponse(BaseModel):
+    """Phase 9: Payment Intent created — mount Payment Element using client_secret."""
+    booking_id: UUID
+    client_secret: str
+    publishable_key: str
+    amount_cents: int
+    booking_date: date
+    start_time: time
+    end_time: time
+    status: str
+
+
 class BookingCancelResponse(BaseModel):
     id: UUID
     status: str
     cancellation_reason: Optional[str]
+    refunded: bool = False
+    refund_policy_message: str = ""
 
     model_config = {"from_attributes": True}
 
