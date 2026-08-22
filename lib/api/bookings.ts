@@ -31,19 +31,24 @@ export interface BookingPayload {
   start_time: string    // HH:MM
 }
 
-export interface BookingCreateResponse {
-  id: string
-  status: string
-  deposit_cents: number
+/** Phase 9: backend creates a Payment Intent for the 10% deposit. */
+export interface BookingDepositResponse {
+  booking_id: string
+  client_secret: string
+  publishable_key: string
+  amount_cents: number    // deposit amount
   booking_date: string
   start_time: string
   end_time: string
+  status: string
 }
 
 export interface BookingCancelResponse {
   id: string
   status: string
   cancellation_reason: string | null
+  refunded: boolean
+  refund_policy_message: string
 }
 
 // ─── Public functions ─────────────────────────────────────────────────────────
@@ -66,8 +71,8 @@ export async function getAvailableSlots(date: string, serviceId?: string): Promi
   }))
 }
 
-export async function createBooking(payload: BookingPayload): Promise<BookingCreateResponse> {
-  return apiClient<BookingCreateResponse>('/api/v1/bookings/', {
+export async function createBooking(payload: BookingPayload): Promise<BookingDepositResponse> {
+  return apiClient<BookingDepositResponse>('/api/v1/bookings/', {
     method: 'POST',
     body: {
       ...payload,

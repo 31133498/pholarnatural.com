@@ -2,17 +2,15 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { Lock, CreditCard, AlertCircle, ArrowLeft, Loader2, Tag, X } from 'lucide-react'
+import { Lock, AlertCircle, ArrowLeft, Loader2, Tag, X } from 'lucide-react'
 import { Field, FieldSet } from '@/components/FormField'
 import { useCart } from '@/context/CartContext'
 import { formatPrice } from '@/lib/format'
 import { CURRENCY } from '@/lib/config'
-import { lastOrder, makeOrderNumber, nowISO } from '@/lib/session-store'
 import { createOrder } from '@/lib/api/orders'
 import { validateDiscount } from '@/lib/api/discounts'
-import type { Order, OrderStatus, ShippingAddress } from '@/lib/types'
+import type { ShippingAddress } from '@/lib/types'
 
 type Errors = Partial<Record<keyof ShippingAddress | 'email', string>>
 
@@ -26,16 +24,8 @@ const EMPTY: ShippingAddress = {
   country: 'Canada',
 }
 
-/**
- * Checkout (doc §1.8). Guest checkout — no account, email only for the confirmation.
- *
- * The payment step is a Stripe *placeholder*: doc §5.1 puts real Stripe in week 3 and the client
- * is still completing KYC. The card fields here are inert and the UI says so — it must never
- * look like it is taking a real payment.
- */
 export default function CheckoutPage() {
-  const router = useRouter()
-  const { items, subtotalCents, shippingCents, totalCents, hydrated, clear } = useCart()
+  const { items, subtotalCents, shippingCents, hydrated, clear } = useCart()
 
   const [address, setAddress] = useState<ShippingAddress>(EMPTY)
   const [email, setEmail] = useState('')
@@ -43,7 +33,6 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
-  // Discount code state
   const [discountCode, setDiscountCode] = useState('')
   const [discountValidating, setDiscountValidating] = useState(false)
   const [discountError, setDiscountError] = useState<string | null>(null)
@@ -121,34 +110,9 @@ export default function CheckoutPage() {
         discount_code: appliedDiscount?.code,
       })
 
-      const orderId = response.id
-      const order: Order = {
-        id: orderId,
-        order_number: makeOrderNumber(),
-        customer_name: address.full_name,
-        customer_email: email,
-        shipping_address: address,
-        subtotal_cents: response.subtotal_cents,
-        shipping_cents: response.shipping_cents,
-        total_cents: response.total_cents,
-        status: response.status as OrderStatus,
-        stripe_payment_intent_id: null,
-        created_at: nowISO(),
-        items: items.map((i, idx) => ({
-          id: `oi_${idx}`,
-          order_id: orderId,
-          product_variant_id: i.variant_id,
-          product_name: i.product_name,
-          variant_label: i.variant_label,
-          quantity: i.quantity,
-          unit_price_cents: i.unit_price_cents,
-          image_url: i.image_url,
-        })),
-      }
-
-      lastOrder.set(order)
+      // Clear cart before leaving — localStorage is synchronous, so it persists through the redirect.
       clear()
-      router.push('/order-confirmation')
+      window.location.href = response.checkout_url
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
       setSubmitting(false)
@@ -307,23 +271,6 @@ export default function CheckoutPage() {
               </p>
             )}
           </FieldSet>
-
-          <FieldSet legend="Payment">
-            {/*
-              Placeholder only. Stripe Elements is mounted here in week 3 (doc §5.1) once the
-              client's account clears KYC. Nothing on this screen touches a payment network.
-            */}
-            <div className="rounded-xl border border-dashed border-outline bg-surface-container-low p-6 text-center">
-              <CreditCard className="mx-auto mb-3 h-8 w-8 text-outline" aria-hidden="true" />
-              <p className="font-body-md text-body-md font-semibold text-on-surface">
-                Stripe payment form loads here
-              </p>
-              <p className="mx-auto mt-2 max-w-md font-body-md text-[13px] text-on-surface-variant">
-                Card payment is not connected yet — the client&apos;s Stripe account is still in
-                onboarding. Placing an order now records it without charging anything.
-              </p>
-            </div>
-          </FieldSet>
         </div>
 
         {/* Summary */}
@@ -376,20 +323,24 @@ export default function CheckoutPage() {
             </div>
           </dl>
 
+          <p className="mt-4 rounded-xl bg-surface-container-lowest px-4 py-3 font-body-md text-[12px] text-on-surface-variant">
+            You&apos;ll complete payment on Stripe&apos;s secure hosted page. Your card details never touch our servers.
+          </p>
+
           <button
             type="submit"
             disabled={submitting}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-primary py-4 font-label-sm text-label-sm text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-primary py-4 font-label-sm text-label-sm text-white transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {submitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                Placing order…
+                Preparing payment…
               </>
             ) : (
               <>
                 <Lock className="h-4 w-4" aria-hidden="true" />
-                Place Order
+                Pay with Stripe
               </>
             )}
           </button>

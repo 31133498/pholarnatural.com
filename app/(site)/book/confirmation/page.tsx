@@ -25,13 +25,15 @@ export default function BookingConfirmationPage() {
 
   const [cancelStatus, setCancelStatus] = useState<'idle' | 'confirming' | 'cancelling' | 'cancelled'>('idle')
   const [cancelError, setCancelError] = useState<string | null>(null)
+  const [refundMessage, setRefundMessage] = useState<string | null>(null)
 
   async function handleCancel() {
     if (!booking) return
     setCancelStatus('cancelling')
     setCancelError(null)
     try {
-      await cancelBooking(booking.id, 'Customer requested cancellation')
+      const result = await cancelBooking(booking.id, 'Customer requested cancellation')
+      setRefundMessage(result.refund_policy_message || null)
       setCancelStatus('cancelled')
     } catch (err) {
       setCancelError(err instanceof Error ? err.message : 'Could not cancel the booking. Please contact us directly.')
@@ -138,8 +140,10 @@ export default function BookingConfirmationPage() {
           <XCircle className="mx-auto mb-3 h-10 w-10 text-on-surface-variant" aria-hidden="true" />
           <p className="font-body-md text-body-md font-semibold text-on-surface">Booking cancelled</p>
           <p className="mt-1 font-body-md text-[13px] text-on-surface-variant">
-            We&apos;ve recorded the cancellation. Refund eligibility is subject to the{' '}
-            <Link href="/refund-policy" className="underline underline-offset-2">refund policy</Link>.
+            {refundMessage
+              ? refundMessage
+              : <>We&apos;ve recorded the cancellation. Refund eligibility is subject to the{' '}<Link href="/refund-policy" className="underline underline-offset-2">refund policy</Link>.</>
+            }
           </p>
         </div>
       ) : cancelStatus === 'confirming' ? (

@@ -18,19 +18,17 @@ export interface OrderPayload {
   discount_code?: string
 }
 
-export interface OrderCreateResponse {
-  id: string
-  subtotal_cents: number
-  shipping_cents: number
-  discount_cents: number
+export interface OrderCheckoutResponse {
+  order_id: string
+  checkout_url: string
   total_cents: number
   status: string
 }
 
 // ─── Public functions ─────────────────────────────────────────────────────────
 
-export async function createOrder(payload: OrderPayload): Promise<OrderCreateResponse> {
-  return apiClient<OrderCreateResponse>('/api/v1/orders/', {
+export async function createOrder(payload: OrderPayload): Promise<OrderCheckoutResponse> {
+  return apiClient<OrderCheckoutResponse>('/api/v1/orders/', {
     method: 'POST',
     body: payload,
   })

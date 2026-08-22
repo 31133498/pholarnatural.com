@@ -2,31 +2,162 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
+import { loadStripe } from '@stripe/stripe-js'
+import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { Check, ChevronLeft, Clock, CreditCard, Loader2, AlertCircle, CalendarDays } from 'lucide-react'
+import { Check, ChevronLeft, Clock, CreditCard, Loader2, AlertCircle, CalendarDays, Lock } from 'lucide-react'
 import BookingCalendar from '@/components/BookingCalendar'
 import { Field } from '@/components/FormField'
 import { type Slot } from '@/lib/data'
-import { getAvailableSlots, createBooking } from '@/lib/api/bookings'
+import { getAvailableSlots, createBooking, type BookingDepositResponse } from '@/lib/api/bookings'
 import { formatPrice, formatDuration, formatTime, formatDateLong, depositFor, addMinutes } from '@/lib/format'
 import { CANCELLATION_POLICY, CURRENCY, DEPOSIT_RATE } from '@/lib/config'
 import { lastBooking, makeBookingReference, nowISO } from '@/lib/session-store'
 import type { Booking, BookingStatus, Service } from '@/lib/types'
 
-const STEP_LABELS = ['Service', 'Date', 'Time'] as const
+// Step labels shown in the progress bar (indices 0–3; step 4 is the Payment icon)
+const STEP_LABELS = ['Service', 'Date', 'Time', 'Details'] as const
 
 interface BookingFlowProps {
   services: Service[]
   blockedDates: string[]
 }
 
+// ─── Inner payment form — must live inside <Elements> ────────────────────────
+
+interface PaymentFormProps {
+  depositResponse: BookingDepositResponse
+  service: Service
+  name: string
+  email: string
+  phone: string
+  date: string
+  time: string
+  onSuccess: () => void
+}
+
+function PaymentForm({ depositResponse, service, name, email, phone, date, time, onSuccess }: PaymentFormProps) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [paying, setPaying] = useState(false)
+  const [payError, setPayError] = useState<string | null>(null)
+
+  async function handlePay(e: React.FormEvent) {
+    e.preventDefault()
+    if (!stripe || !elements) return
+    setPaying(true)
+    setPayError(null)
+
+    const { error, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      redirect: 'if_required',
+    })
+
+    if (error) {
+      setPayError(error.message ?? 'Payment failed. Please try again.')
+      setPaying(false)
+      return
+    }
+
+    if (paymentIntent?.status === 'succeeded') {
+      const booking: Booking & { service_name: string } = {
+        id: depositResponse.booking_id,
+        reference: makeBookingReference(),
+        service_id: service.id,
+        service_name: service.name,
+        customer_name: name,
+        customer_email: email,
+        customer_phone: phone || null,
+        booking_date: date,
+        start_time: time,
+        end_time: addMinutes(time, service.duration_minutes),
+        status: 'confirmed' as BookingStatus,
+        deposit_cents: depositResponse.amount_cents,
+        stripe_payment_intent_id: paymentIntent.id,
+        cancellation_reason: null,
+        created_at: nowISO(),
+      }
+      lastBooking.set(booking)
+      onSuccess()
+    }
+
+    setPaying(false)
+  }
+
+  return (
+    <form onSubmit={handlePay} className="space-y-5">
+      <PaymentElement
+        options={{
+          layout: 'tabs',
+          fields: { billingDetails: { email: 'never' } },
+        }}
+      />
+
+      {payError && (
+        <p
+          role="alert"
+          className="flex items-center gap-2 rounded-xl bg-error-container p-3 font-body-md text-[13px] text-on-error-container"
+        >
+          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {payError}
+        </p>
+      )}
+
+      <button
+        type="submit"
+        disabled={paying || !stripe || !elements}
+        className="flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-4 font-label-sm text-label-sm text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+      >
+        {paying ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            Processing…
+          </>
+        ) : (
+          <>
+            <Lock className="h-4 w-4" aria-hidden="true" />
+            Pay deposit {formatPrice(depositResponse.amount_cents)}
+          </>
+        )}
+      </button>
+    </form>
+  )
+}
+
+// ─── Payment step wrapper — creates the Stripe Elements provider ──────────────
+
+interface PaymentStepProps extends PaymentFormProps {}
+
+function PaymentStep(props: PaymentStepProps) {
+  const stripePromise = useMemo(
+    () => loadStripe(props.depositResponse.publishable_key),
+    // publishable_key never changes within a session — one memo is fine
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
+  return (
+    <Elements
+      stripe={stripePromise}
+      options={{
+        clientSecret: props.depositResponse.client_secret,
+        appearance: { theme: 'stripe' },
+      }}
+    >
+      <PaymentForm {...props} />
+    </Elements>
+  )
+}
+
+// ─── Booking flow ─────────────────────────────────────────────────────────────
+
 /**
- * Multi-step booking (doc §1.6): service → date → time → deposit → confirmation.
+ * Multi-step booking (doc §1.6): service → date → time → details → deposit → confirmation.
  *
- * Progress is shown for the first three steps, matching the doc's "3 progress steps then
- * payment". Each step validates before it will advance, and moving back never discards a later
- * choice unless that choice has become invalid (changing the service can change which slots fit).
+ * Progress is shown for the first four steps, matching the doc's flow. Each step validates
+ * before advancing; moving back never discards a later choice unless that choice has become
+ * invalid (changing the service can change which slots fit).
  */
 export default function BookingFlow({ services, blockedDates }: BookingFlowProps) {
   const router = useRouter()
@@ -39,11 +170,7 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
   const [service, setService] = useState<Service | null>(initialService)
   const [date, setDate] = useState<string | null>(null)
   const [time, setTime] = useState<string | null>(null)
-  /*
-   * Availability is keyed by date + service. Holding the key alongside the result lets "loading"
-   * be derived — the results simply do not match the current selection yet — instead of being a
-   * second piece of state that has to be flipped on synchronously before the fetch starts.
-   */
+
   const slotsKey = date && service ? `${date}|${service.id}` : null
   const [slotsFor, setSlotsFor] = useState<{ key: string; slots: Slot[] } | null>(null)
   const slots = slotsFor?.key === slotsKey ? slotsFor.slots : []
@@ -56,21 +183,20 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
+  // Set when the API returns a booking + client_secret; triggers step 4 (Payment Element)
+  const [depositResponse, setDepositResponse] = useState<BookingDepositResponse | null>(null)
+
   const deposit = service ? depositFor(service.price_cents) : 0
 
-  // Fetch availability whenever the date or service changes — this is GET /api/bookings/slots.
   useEffect(() => {
     if (!date || !service || !slotsKey) return
     let cancelled = false
     getAvailableSlots(date, service.id).then((s) => {
       if (cancelled) return
       setSlotsFor({ key: slotsKey, slots: s })
-      // A previously chosen time may no longer fit the newly chosen service.
       setTime((t) => (t && s.find((x) => x.time === t)?.available ? t : null))
     })
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [date, service, slotsKey])
 
   const canContinue = useMemo(() => {
@@ -89,7 +215,8 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
     return Object.keys(next).length === 0
   }
 
-  async function submit(e: React.FormEvent) {
+  // Step 3 submit: validate details, call API, advance to step 4 with Payment Element
+  async function handleDetails(e: React.FormEvent) {
     e.preventDefault()
     if (!service || !date || !time || !validateDetails()) return
     setSubmitting(true)
@@ -104,36 +231,22 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
         booking_date: date,
         start_time: time,
       })
-
-      const booking: Booking & { service_name: string } = {
-        id: response.id,
-        reference: makeBookingReference(),
-        service_id: service.id,
-        service_name: service.name,
-        customer_name: name,
-        customer_email: email,
-        customer_phone: phone || null,
-        booking_date: date,
-        start_time: time,
-        end_time: addMinutes(time, service.duration_minutes),
-        status: response.status as BookingStatus,
-        deposit_cents: response.deposit_cents,
-        stripe_payment_intent_id: null,
-        cancellation_reason: null,
-        created_at: nowISO(),
-      }
-
-      lastBooking.set(booking)
-      router.push('/book/confirmation')
+      setDepositResponse(response)
+      setStep(4)
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+    } finally {
       setSubmitting(false)
     }
   }
 
+  function handlePaymentSuccess() {
+    router.push('/book/confirmation')
+  }
+
   return (
     <div className="mx-auto max-w-5xl px-5 py-16 md:px-16">
-      {/* Progress (doc §1.6.1–3) */}
+      {/* Progress */}
       <ol className="mb-12 flex items-center justify-center gap-2 sm:gap-4">
         {STEP_LABELS.map((label, i) => {
           const done = step > i
@@ -154,8 +267,8 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
                   {done ? <Check className="h-3 w-3" aria-hidden="true" /> : i + 1}
                 </span>
                 <span className="hidden sm:inline">{label}</span>
-                <span className="sr-only-live">
-                  Step {i + 1} of 3: {label}
+                <span className="sr-only">
+                  Step {i + 1} of {STEP_LABELS.length + 1}: {label}
                   {done ? ' — complete' : current ? ' — current' : ''}
                 </span>
               </span>
@@ -165,21 +278,26 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
             </li>
           )
         })}
+        {/* Payment icon step */}
         <li className="flex items-center gap-2 sm:gap-4">
           <span className="h-px w-4 bg-outline-variant sm:w-8" aria-hidden="true" />
           <span
-            aria-current={step === 3 ? 'step' : undefined}
+            aria-current={step === 4 ? 'step' : undefined}
             className={`flex items-center gap-2 rounded-full px-3 py-1.5 font-label-sm text-label-sm sm:px-4 ${
-              step === 3 ? 'bg-secondary text-white' : 'bg-surface-container-high text-on-surface-variant'
+              step === 4 ? 'bg-secondary text-white' : 'bg-surface-container-high text-on-surface-variant'
             }`}
           >
             <CreditCard className="h-4 w-4" aria-hidden="true" />
             <span className="hidden sm:inline">Payment</span>
+            <span className="sr-only">
+              Step {STEP_LABELS.length + 1} of {STEP_LABELS.length + 1}: Payment
+              {step === 4 ? ' — current' : ''}
+            </span>
           </span>
         </li>
       </ol>
 
-      {/* Step 1 — service */}
+      {/* Step 0 — service selection */}
       {step === 0 && (
         <section>
           <h1 className="font-headline-display text-headline-lg-mobile text-primary md:text-headline-lg">
@@ -232,7 +350,7 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
         </section>
       )}
 
-      {/* Step 2 — date */}
+      {/* Step 1 — date */}
       {step === 1 && (
         <section>
           <h1 className="font-headline-display text-headline-lg-mobile text-primary md:text-headline-lg">
@@ -247,7 +365,7 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
         </section>
       )}
 
-      {/* Step 3 — time */}
+      {/* Step 2 — time */}
       {step === 2 && (
         <section>
           <h1 className="font-headline-display text-headline-lg-mobile text-primary md:text-headline-lg">
@@ -308,71 +426,78 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
         </section>
       )}
 
-      {/* Step 4 — details + deposit */}
+      {/* Step 3 — customer details */}
       {step === 3 && service && date && time && (
-        <form onSubmit={submit} noValidate>
+        <form onSubmit={handleDetails} noValidate>
           <h1 className="font-headline-display text-headline-lg-mobile text-primary md:text-headline-lg">
-            Finalize Your Booking
+            Your Details
           </h1>
           <p className="mt-3 font-body-lg text-body-lg text-on-surface-variant">
-            Please provide your details and secure your slot with a {Math.round(DEPOSIT_RATE * 100)}%
-            deposit.
+            Almost there — enter your contact info and we&apos;ll hold your slot.
           </p>
 
           <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
-            <div className="space-y-6">
-              <fieldset className="space-y-4">
-                <legend className="mb-2 font-headline-md text-headline-md text-primary">
-                  Customer Information
-                </legend>
-                <Field
-                  label="Full name"
-                  required
-                  value={name}
-                  error={errors.name}
-                  onChange={(e) => setName(e.target.value)}
-                  autoComplete="name"
-                />
-                <Field
-                  label="Email address"
-                  type="email"
-                  required
-                  value={email}
-                  error={errors.email}
-                  hint="Your confirmation and any changes are sent here."
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
-                />
-                <Field
-                  label="Phone number"
-                  type="tel"
-                  value={phone}
-                  hint="For WhatsApp or SMS updates about your appointment."
-                  onChange={(e) => setPhone(e.target.value)}
-                  autoComplete="tel"
-                />
-              </fieldset>
+            <fieldset className="space-y-4">
+              <legend className="mb-2 font-headline-md text-headline-md text-primary">
+                Contact information
+              </legend>
+              <Field
+                label="Full name"
+                required
+                value={name}
+                error={errors.name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete="name"
+              />
+              <Field
+                label="Email address"
+                type="email"
+                required
+                value={email}
+                error={errors.email}
+                hint="Your confirmation and any changes are sent here."
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+              />
+              <Field
+                label="Phone number"
+                type="tel"
+                value={phone}
+                hint="For WhatsApp or SMS updates about your appointment."
+                onChange={(e) => setPhone(e.target.value)}
+                autoComplete="tel"
+              />
 
-              {/*
-                Placeholder only — doc §5.1 schedules the real Stripe Payment Element for week 3,
-                and the client's account is still in KYC. No deposit is charged here.
-              */}
-              <fieldset>
-                <legend className="mb-4 font-headline-md text-headline-md text-primary">Deposit payment</legend>
-                <div className="rounded-xl border border-dashed border-outline bg-surface-container-low p-6 text-center">
-                  <CreditCard className="mx-auto mb-3 h-8 w-8 text-outline" aria-hidden="true" />
-                  <p className="font-body-md text-body-md font-semibold text-on-surface">
-                    Stripe payment element loads here
-                  </p>
-                  <p className="mx-auto mt-2 max-w-sm font-body-md text-[13px] text-on-surface-variant">
-                    Card payment is not connected yet. Confirming now reserves the slot without
-                    charging the deposit.
-                  </p>
-                </div>
-              </fieldset>
-            </div>
+              {submitError && (
+                <p
+                  role="alert"
+                  className="flex items-center gap-2 rounded-xl bg-error-container p-3 font-body-md text-[13px] text-on-error-container"
+                >
+                  <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  {submitError}
+                </p>
+              )}
 
-            {/* Summary */}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-4 font-label-sm text-label-sm text-white transition-opacity hover:opacity-90 disabled:opacity-60 sm:w-auto sm:px-10"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    Reserving slot…
+                  </>
+                ) : (
+                  <>
+                    <CalendarDays className="h-4 w-4" aria-hidden="true" />
+                    Continue to Payment
+                  </>
+                )}
+              </button>
+            </fieldset>
+
+            {/* Booking summary */}
             <aside className="h-fit rounded-2xl border border-outline-variant bg-surface-container-low p-6">
               <h2 className="mb-6 font-headline-md text-headline-md text-primary">Booking Summary</h2>
               <dl className="space-y-3 font-body-md text-body-md">
@@ -401,48 +526,73 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
                   <dd className="text-primary">{formatPrice(deposit)}</dd>
                 </div>
               </dl>
-
               <p className="mt-4 font-body-md text-[12px] text-on-surface-variant">
                 The remaining {formatPrice(service.price_cents - deposit)} is payable in the studio.
                 All prices in {CURRENCY}.
               </p>
+            </aside>
+          </div>
+        </form>
+      )}
 
-              {submitError && (
-                <p
-                  role="alert"
-                  className="mt-4 flex items-center gap-2 rounded-xl bg-error-container p-3 font-body-md text-[13px] text-on-error-container"
-                >
-                  <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  {submitError}
-                </p>
-              )}
+      {/* Step 4 — Stripe Payment Element */}
+      {step === 4 && depositResponse && service && date && time && (
+        <div>
+          <h1 className="font-headline-display text-headline-lg-mobile text-primary md:text-headline-lg">
+            Pay Your Deposit
+          </h1>
+          <p className="mt-3 font-body-lg text-body-lg text-on-surface-variant">
+            A {Math.round(DEPOSIT_RATE * 100)}% deposit secures your slot. The remainder is due in
+            the studio.
+          </p>
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-secondary py-4 font-label-sm text-label-sm text-white transition-opacity hover:opacity-90 disabled:opacity-60"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    Confirming…
-                  </>
-                ) : (
-                  <>
-                    <CalendarDays className="h-4 w-4" aria-hidden="true" />
-                    Confirm Booking
-                  </>
-                )}
-              </button>
+          <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
+            <div>
+              <p className="mb-5 rounded-xl bg-surface-container-lowest px-4 py-3 font-body-md text-[13px] text-on-surface-variant">
+                Your card details are processed securely by Stripe and never stored on our servers.
+              </p>
+              <PaymentStep
+                depositResponse={depositResponse}
+                service={service}
+                name={name}
+                email={email}
+                phone={phone}
+                date={date}
+                time={time}
+                onSuccess={handlePaymentSuccess}
+              />
+            </div>
 
-              {/*
-                The middle cancellation window is still unconfirmed by the client (doc §8.6), so
-                this states only the two rules that ARE settled and points elsewhere for the rest.
-              */}
+            {/* Booking summary (read-only) */}
+            <aside className="h-fit rounded-2xl border border-outline-variant bg-surface-container-low p-6">
+              <h2 className="mb-6 font-headline-md text-headline-md text-primary">Booking Summary</h2>
+              <dl className="space-y-3 font-body-md text-body-md">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-on-surface-variant">Service</dt>
+                  <dd className="text-right font-semibold text-on-surface">{service.name}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-on-surface-variant">Date</dt>
+                  <dd className="text-right font-semibold text-on-surface">{formatDateLong(date)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-on-surface-variant">Time</dt>
+                  <dd className="text-right font-semibold text-on-surface">
+                    {formatTime(time)} – {formatTime(addMinutes(time, service.duration_minutes))}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-on-surface-variant">Name</dt>
+                  <dd className="text-right font-semibold text-on-surface">{name}</dd>
+                </div>
+                <div className="flex justify-between gap-4 border-t border-outline-variant pt-3 font-headline-md text-headline-md">
+                  <dt className="text-primary">Deposit due</dt>
+                  <dd className="text-primary">{formatPrice(depositResponse.amount_cents)}</dd>
+                </div>
+              </dl>
               <p className="mt-4 font-body-md text-[12px] text-on-surface-variant">
-                Cancel within {CANCELLATION_POLICY.fullRefundWithinMinutes} minutes of booking for a
-                full refund. The deposit is non-refundable within{' '}
-                {CANCELLATION_POLICY.forfeitWithinHours} hours of the appointment. See the{' '}
+                Cancel within {CANCELLATION_POLICY.fullRefundWithinMinutes} minutes of booking for
+                a full refund. See the{' '}
                 <Link href="/refund-policy" className="underline underline-offset-2">
                   refund policy
                 </Link>
@@ -450,12 +600,12 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
               </p>
             </aside>
           </div>
-        </form>
+        </div>
       )}
 
-      {/* Navigation */}
+      {/* Navigation (Back / Continue — hidden at step 3+ which have their own buttons) */}
       <div className="mt-10 flex items-center justify-between gap-4">
-        {step > 0 ? (
+        {step > 0 && step < 4 ? (
           <button
             type="button"
             onClick={() => setStep((s) => s - 1)}
