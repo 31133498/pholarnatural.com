@@ -1,9 +1,12 @@
 import re
+from datetime import date
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from app.models.service import Service
+from app.models.booking import Booking
 from app.schemas.service import ServiceCreate, ServiceUpdate
 
 def get_active_services(db: Session):
@@ -47,15 +50,30 @@ def update_service(db: Session, service_id: int, service_in: ServiceUpdate):
     db.refresh(db_service)
     return db_service
 
-def delete_service(db: Session, service_id: int):
-    """Delete a service."""
+def delete_service(db: Session, service_id):
+    """Delete a service, blocked if it has future non-cancelled bookings."""
     db_service = db.query(Service).filter(Service.id == service_id).first()
     if not db_service:
         raise HTTPException(status_code=404, detail="Service not found")
-        
+
+    future_count = (
+        db.query(func.count(Booking.id))
+        .filter(
+            Booking.service_id == service_id,
+            Booking.booking_date >= date.today(),
+            Booking.status.not_in(["cancelled"]),
+        )
+        .scalar()
+    ) or 0
+
+    if future_count:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete — {future_count} upcoming booking(s). Cancel them first.",
+        )
+
     db.delete(db_service)
     db.commit()
-    return {"message": "Service deleted successfully"}
 
 def generate_unique_slug(db: Session, slug: str) -> str:
     """

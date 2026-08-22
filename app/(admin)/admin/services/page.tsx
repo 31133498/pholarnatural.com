@@ -1,8 +1,8 @@
 'use client'
 
 import Image from 'next/image'
-import { useState } from 'react'
-import { Plus, Pencil, Trash2, Scissors, ImageUp } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Plus, Pencil, Trash2, Scissors, Loader2 } from 'lucide-react'
 import {
   PageHeader,
   StatusBadge,
@@ -16,32 +16,93 @@ import {
 } from '@/components/admin/ui'
 import { Field, TextareaField } from '@/components/FormField'
 import { useToast } from '@/context/ToastContext'
-import { SERVICES, BOOKINGS } from '@/lib/data'
-import { formatPrice, formatDuration, toISODate } from '@/lib/format'
-import type { Service } from '@/lib/types'
+import { formatPrice, formatDuration } from '@/lib/format'
+import {
+  listAdminServices,
+  createAdminService,
+  updateAdminService,
+  deleteAdminService,
+  type AdminService,
+} from '@/lib/api/admin-services'
+
+interface ServiceFormValues {
+  name: string
+  slug: string
+  description: string
+  duration_minutes: number
+  price_cents: number
+  is_active: boolean
+}
 
 /** Service management (doc §1.14.3). */
 export default function AdminServicesPage() {
-  const [services, setServices] = useState<Service[]>(SERVICES)
-  const [editing, setEditing] = useState<Service | null>(null)
+  const [services, setServices] = useState<AdminService[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState<AdminService | null>(null)
   const [creating, setCreating] = useState(false)
-  const [deleting, setDeleting] = useState<Service | null>(null)
+  const [deleting, setDeleting] = useState<AdminService | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [confirmLoading, setConfirmLoading] = useState(false)
   const { toast } = useToast()
 
-  const today = toISODate(new Date())
-
-  /**
-   * doc §1.14.3: a service may only be deleted if it has no future bookings — otherwise a
-   * customer's confirmed appointment would point at a service that no longer exists.
-   */
-  const futureBookingsFor = (serviceId: string) =>
-    BOOKINGS.filter(
-      (b) => b.service_id === serviceId && b.booking_date >= today && b.status !== 'cancelled',
-    ).length
+  useEffect(() => {
+    listAdminServices()
+      .then(setServices)
+      .catch(() => toast('Failed to load services', 'error'))
+      .finally(() => setLoading(false))
+  }, [toast])
 
   const closeForm = () => {
     setEditing(null)
     setCreating(false)
+  }
+
+  async function handleSave(values: ServiceFormValues) {
+    setSaving(true)
+    try {
+      if (editing) {
+        const updated = await updateAdminService(editing.id, {
+          name: values.name,
+          slug: values.slug || undefined,
+          description: values.description || null,
+          duration_minutes: values.duration_minutes,
+          price_cents: values.price_cents,
+          is_active: values.is_active,
+        })
+        setServices((ss) => ss.map((s) => (s.id === editing.id ? updated : s)))
+        toast(`${updated.name} updated`)
+      } else {
+        const created = await createAdminService({
+          name: values.name,
+          description: values.description || null,
+          duration_minutes: values.duration_minutes,
+          price_cents: values.price_cents,
+          is_active: values.is_active,
+        })
+        setServices((ss) => [...ss, created])
+        toast(`${created.name} created`)
+      }
+      closeForm()
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Save failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleting) return
+    setConfirmLoading(true)
+    try {
+      await deleteAdminService(deleting.id)
+      setServices((ss) => ss.filter((s) => s.id !== deleting.id))
+      toast(`${deleting.name} deleted`, 'info')
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Delete failed', 'error')
+    } finally {
+      setConfirmLoading(false)
+      setDeleting(null)
+    }
   }
 
   return (
@@ -57,7 +118,11 @@ export default function AdminServicesPage() {
         }
       />
 
-      {services.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" aria-label="Loading services" />
+        </div>
+      ) : services.length === 0 ? (
         <EmptyState icon={Scissors} title="No services" message="Add a service to open up bookings." />
       ) : (
         <TableWrap caption="All services">
@@ -66,62 +131,61 @@ export default function AdminServicesPage() {
               <Th>Service</Th>
               <Th>Duration</Th>
               <Th>Price</Th>
-              <Th>Upcoming</Th>
               <Th>Status</Th>
               <Th className="text-right">Actions</Th>
             </tr>
           </thead>
           <tbody>
-            {services.map((s) => {
-              const upcoming = futureBookingsFor(s.id)
-              return (
-                <tr key={s.id}>
-                  <Td>
-                    <div className="flex items-center gap-3">
+            {services.map((s) => (
+              <tr key={s.id}>
+                <Td>
+                  <div className="flex items-center gap-3">
+                    {s.image_url ? (
                       <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-surface-container">
                         <Image src={s.image_url} alt="" fill sizes="48px" className="object-cover" />
                       </div>
-                      <div>
-                        <span className="block font-semibold text-on-surface">{s.name}</span>
-                        <span className="block max-w-xs truncate text-[12px]">{s.description}</span>
+                    ) : (
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-surface-container">
+                        <Scissors className="h-5 w-5 text-outline" aria-hidden="true" />
                       </div>
+                    )}
+                    <div>
+                      <span className="block font-semibold text-on-surface">{s.name}</span>
+                      {s.description && (
+                        <span className="block max-w-xs truncate text-[12px] text-on-surface-variant">
+                          {s.description}
+                        </span>
+                      )}
                     </div>
-                  </Td>
-                  <Td>{formatDuration(s.duration_minutes)}</Td>
-                  <Td className="font-semibold text-on-surface">{formatPrice(s.price_cents)}</Td>
-                  <Td>{upcoming === 0 ? '—' : `${upcoming} booked`}</Td>
-                  <Td>
-                    <StatusBadge status={s.is_active ? 'active' : 'draft'} />
-                  </Td>
-                  <Td>
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setEditing(s)}
-                        aria-label={`Edit ${s.name}`}
-                        className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-primary"
-                      >
-                        <Pencil className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={upcoming > 0}
-                        onClick={() => setDeleting(s)}
-                        aria-label={
-                          upcoming > 0
-                            ? `Cannot delete ${s.name} — it has ${upcoming} upcoming bookings`
-                            : `Delete ${s.name}`
-                        }
-                        title={upcoming > 0 ? 'Cannot delete a service with upcoming bookings' : undefined}
-                        className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </Td>
-                </tr>
-              )
-            })}
+                  </div>
+                </Td>
+                <Td>{formatDuration(s.duration_minutes)}</Td>
+                <Td className="font-semibold text-on-surface">{formatPrice(s.price_cents)}</Td>
+                <Td>
+                  <StatusBadge status={s.is_active ? 'active' : 'draft'} />
+                </Td>
+                <Td>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(s)}
+                      aria-label={`Edit ${s.name}`}
+                      className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-primary"
+                    >
+                      <Pencil className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleting(s)}
+                      aria-label={`Delete ${s.name}`}
+                      className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-error-container hover:text-on-error-container"
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </Td>
+              </tr>
+            ))}
           </tbody>
         </TableWrap>
       )}
@@ -130,60 +194,31 @@ export default function AdminServicesPage() {
         <ServiceForm
           key={editing?.id ?? 'new'}
           service={editing}
+          saving={saving}
           onClose={closeForm}
-          onSave={(form) => {
-            if (editing) {
-              setServices((ss) => ss.map((s) => (s.id === editing.id ? { ...s, ...form } : s)))
-              toast(`${form.name} updated`)
-            } else {
-              setServices((ss) => [
-                ...ss,
-                {
-                  ...form,
-                  id: `svc_${Date.now()}`,
-                  long_description: form.description,
-                  what_to_expect: [],
-                  image_url: '/images/services/wash-and-blow-dry.webp',
-                  is_active: true,
-                },
-              ])
-              toast(`${form.name} created`)
-            }
-            closeForm()
-          }}
+          onSave={handleSave}
         />
       )}
 
       <ConfirmDialog
         open={deleting !== null}
         title={`Delete ${deleting?.name}?`}
-        message="This removes the service from the booking flow and the services page. This cannot be undone."
+        message="This removes the service from the booking flow and the services page. Services with upcoming bookings cannot be deleted — cancel those bookings first."
         onCancel={() => setDeleting(null)}
-        onConfirm={() => {
-          if (!deleting) return
-          setServices((ss) => ss.filter((s) => s.id !== deleting.id))
-          toast(`${deleting.name} deleted`, 'info')
-          setDeleting(null)
-        }}
+        onConfirm={handleDelete}
       />
     </>
   )
 }
 
-interface ServiceFormValues {
-  name: string
-  slug: string
-  description: string
-  duration_minutes: number
-  price_cents: number
-}
-
 function ServiceForm({
   service,
+  saving,
   onClose,
   onSave,
 }: {
-  service: Service | null
+  service: AdminService | null
+  saving: boolean
   onClose: () => void
   onSave: (values: ServiceFormValues) => void
 }) {
@@ -192,11 +227,12 @@ function ServiceForm({
       ? {
           name: service.name,
           slug: service.slug,
-          description: service.description,
+          description: service.description ?? '',
           duration_minutes: service.duration_minutes,
           price_cents: service.price_cents,
+          is_active: service.is_active,
         }
-      : { name: '', slug: '', description: '', duration_minutes: 60, price_cents: 0 },
+      : { name: '', slug: '', description: '', duration_minutes: 60, price_cents: 0, is_active: true },
   )
 
   return (
@@ -214,12 +250,13 @@ function ServiceForm({
           value={values.name}
           onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
         />
-        <Field
-          label="URL slug"
-          required
-          value={values.slug}
-          onChange={(e) => setValues((v) => ({ ...v, slug: e.target.value }))}
-        />
+        {service && (
+          <Field
+            label="URL slug"
+            value={values.slug}
+            onChange={(e) => setValues((v) => ({ ...v, slug: e.target.value }))}
+          />
+        )}
         <TextareaField
           label="Description"
           rows={3}
@@ -248,19 +285,27 @@ function ServiceForm({
           />
         </div>
 
-        <fieldset className="rounded-xl border border-dashed border-outline p-6 text-center">
-          <legend className="px-2 font-label-sm text-label-sm font-bold uppercase text-primary">Image</legend>
-          <ImageUp className="mx-auto mb-2 h-8 w-8 text-outline" aria-hidden="true" />
-          <p className="font-body-md text-[13px] text-on-surface-variant">
-            Image upload connects to object storage with the backend in week 2.
-          </p>
-        </fieldset>
+        <label className="flex cursor-pointer items-center gap-3">
+          <input
+            type="checkbox"
+            checked={values.is_active}
+            onChange={(e) => setValues((v) => ({ ...v, is_active: e.target.checked }))}
+            className="h-4 w-4 rounded border-outline accent-primary"
+          />
+          <span className="font-body-md text-body-md text-on-surface">Active (visible in booking flow)</span>
+        </label>
 
         <div className="flex flex-col gap-3 pt-2 sm:flex-row-reverse">
-          <AdminButton type="submit" className="flex-1">
-            {service ? 'Save changes' : 'Create service'}
+          <AdminButton type="submit" disabled={saving} className="flex-1">
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : service ? (
+              'Save changes'
+            ) : (
+              'Create service'
+            )}
           </AdminButton>
-          <AdminButton variant="secondary" className="flex-1" onClick={onClose}>
+          <AdminButton variant="secondary" className="flex-1" onClick={onClose} disabled={saving}>
             Cancel
           </AdminButton>
         </div>

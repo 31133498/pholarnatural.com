@@ -1,7 +1,17 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { CalendarDays, Check, Ban, CalendarOff, ChevronLeft, ChevronRight, Plus, List } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  CalendarDays,
+  Check,
+  Ban,
+  CalendarOff,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  List,
+  Loader2,
+} from 'lucide-react'
 import {
   PageHeader,
   StatusBadge,
@@ -14,25 +24,34 @@ import {
 } from '@/components/admin/ui'
 import { Field, TextareaField } from '@/components/FormField'
 import { useToast } from '@/context/ToastContext'
-import { BOOKINGS, BLOCKED_DATES, serviceById } from '@/lib/data'
+import {
+  listAdminBookings,
+  confirmBooking,
+  cancelBookingAdmin,
+  listAdminBlockedDates,
+  blockDate,
+  unblockDate,
+  type AdminBooking,
+  type AdminBlockedDate,
+} from '@/lib/api/admin-bookings'
 import { formatDateShort, formatDateLong, formatTime, formatPrice, toISODate } from '@/lib/format'
 import { OPEN_WEEKDAYS } from '@/lib/config'
-import type { Booking, BlockedDate, BookingStatus } from '@/lib/types'
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ] as const
 
-type Filter = 'all' | BookingStatus
+type Filter = 'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled'
 
 /** Booking management (doc §1.14.4): calendar, list, confirm, cancel, and blocked dates. */
 export default function AdminBookingsPage() {
-  const [bookings, setBookings] = useState<Booking[]>(BOOKINGS)
-  const [blocked, setBlocked] = useState<BlockedDate[]>(BLOCKED_DATES)
+  const [bookings, setBookings] = useState<AdminBooking[]>([])
+  const [blocked, setBlocked] = useState<AdminBlockedDate[]>([])
+  const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'calendar' | 'list'>('calendar')
   const [filter, setFilter] = useState<Filter>('all')
-  const [cancelling, setCancelling] = useState<Booking | null>(null)
+  const [cancelling, setCancelling] = useState<AdminBooking | null>(null)
   const [blockingOpen, setBlockingOpen] = useState(false)
   const { toast } = useToast()
 
@@ -42,6 +61,16 @@ export default function AdminBookingsPage() {
     return d
   }, [])
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
+
+  useEffect(() => {
+    Promise.all([listAdminBookings(), listAdminBlockedDates()])
+      .then(([bs, bds]) => {
+        setBookings(bs)
+        setBlocked(bds)
+      })
+      .catch(() => toast('Failed to load bookings', 'error'))
+      .finally(() => setLoading(false))
+  }, [toast])
 
   const visible = useMemo(
     () =>
@@ -55,7 +84,7 @@ export default function AdminBookingsPage() {
   )
 
   const byDate = useMemo(() => {
-    const map = new Map<string, Booking[]>()
+    const map = new Map<string, AdminBooking[]>()
     for (const b of bookings) {
       if (b.status === 'cancelled') continue
       const list = map.get(b.booking_date) ?? []
@@ -77,8 +106,55 @@ export default function AdminBookingsPage() {
   for (let i = 0; i < firstWeekday; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(toISODate(new Date(year, month, d)))
 
-  function setStatus(id: string, status: BookingStatus, reason: string | null = null) {
-    setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status, cancellation_reason: reason } : b)))
+  async function handleConfirm(id: string) {
+    try {
+      await confirmBooking(id)
+      setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status: 'confirmed' } : b)))
+      toast('Booking confirmed')
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to confirm', 'error')
+    }
+  }
+
+  async function handleCancel(id: string, reason: string) {
+    try {
+      await cancelBookingAdmin(id, reason)
+      setBookings((bs) =>
+        bs.map((b) => (b.id === id ? { ...b, status: 'cancelled', cancellation_reason: reason } : b)),
+      )
+      toast('Booking cancelled', 'info')
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to cancel', 'error')
+    }
+  }
+
+  async function handleBlockDate(dateStr: string, reason: string) {
+    try {
+      const bd = await blockDate(dateStr, reason || null)
+      setBlocked((bs) => [...bs, bd])
+      toast(`${formatDateShort(dateStr)} blocked out`)
+      setBlockingOpen(false)
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to block date', 'error')
+    }
+  }
+
+  async function handleUnblock(id: string, dateStr: string) {
+    try {
+      await unblockDate(id)
+      setBlocked((bs) => bs.filter((b) => b.id !== id))
+      toast(`${formatDateShort(dateStr)} unblocked`, 'info')
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to unblock', 'error')
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" aria-label="Loading bookings" />
+      </div>
+    )
   }
 
   return (
@@ -181,7 +257,7 @@ export default function AdminBookingsPage() {
                         <li
                           key={b.id}
                           className="truncate rounded bg-primary/10 px-1.5 py-1 font-body-md text-[11px] text-primary"
-                          title={`${formatTime(b.start_time)} ${b.customer_name} — ${serviceById(b.service_id)?.name}`}
+                          title={`${formatTime(b.start_time)} ${b.customer_name} — ${b.service_name}`}
                         >
                           {formatTime(b.start_time)} {b.customer_name}
                         </li>
@@ -204,13 +280,10 @@ export default function AdminBookingsPage() {
                     key={b.id}
                     className="flex items-center gap-2 rounded-full bg-error-container px-3 py-1.5 font-body-md text-[13px] text-on-error-container"
                   >
-                    {formatDateShort(b.date)} — {b.reason}
+                    {formatDateShort(b.date)} — {b.reason ?? 'Studio closed'}
                     <button
                       type="button"
-                      onClick={() => {
-                        setBlocked((bs) => bs.filter((x) => x.id !== b.id))
-                        toast(`${formatDateShort(b.date)} unblocked`, 'info')
-                      }}
+                      onClick={() => handleUnblock(b.id, b.date)}
                       aria-label={`Unblock ${formatDateLong(b.date)}`}
                       className="rounded-full p-0.5 hover:bg-on-error-container/10"
                     >
@@ -265,9 +338,11 @@ export default function AdminBookingsPage() {
                     <Td>
                       <span className="block font-semibold text-on-surface">{b.customer_name}</span>
                       <span className="block text-[12px]">{b.customer_email}</span>
-                      {b.customer_phone && <span className="block text-[12px]">{b.customer_phone}</span>}
+                      {b.customer_phone && (
+                        <span className="block text-[12px]">{b.customer_phone}</span>
+                      )}
                     </Td>
-                    <Td>{serviceById(b.service_id)?.name ?? '—'}</Td>
+                    <Td>{b.service_name}</Td>
                     <Td>
                       {formatDateShort(b.booking_date)}
                       <span className="block text-[12px]">
@@ -278,7 +353,9 @@ export default function AdminBookingsPage() {
                     <Td>
                       <StatusBadge status={b.status} />
                       {b.cancellation_reason && (
-                        <span className="mt-1 block text-[11px]">{b.cancellation_reason}</span>
+                        <span className="mt-1 block text-[11px] text-on-surface-variant">
+                          {b.cancellation_reason}
+                        </span>
                       )}
                     </Td>
                     <Td>
@@ -286,17 +363,14 @@ export default function AdminBookingsPage() {
                         {b.status === 'pending' && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setStatus(b.id, 'confirmed')
-                              toast(`${b.reference} confirmed — customer emailed`)
-                            }}
+                            onClick={() => handleConfirm(b.id)}
                             aria-label={`Confirm booking ${b.reference}`}
                             className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-primary/10 hover:text-primary"
                           >
                             <Check className="h-4 w-4" aria-hidden="true" />
                           </button>
                         )}
-                        {b.status !== 'cancelled' && (
+                        {b.status !== 'cancelled' && b.status !== 'completed' && (
                           <button
                             type="button"
                             onClick={() => setCancelling(b)}
@@ -321,8 +395,7 @@ export default function AdminBookingsPage() {
           booking={cancelling}
           onClose={() => setCancelling(null)}
           onConfirm={(reason) => {
-            setStatus(cancelling.id, 'cancelled', reason)
-            toast(`${cancelling.reference} cancelled — refund email queued`, 'info')
+            handleCancel(cancelling.id, reason)
             setCancelling(null)
           }}
         />
@@ -331,14 +404,7 @@ export default function AdminBookingsPage() {
       {blockingOpen && (
         <BlockDateDialog
           onClose={() => setBlockingOpen(false)}
-          onConfirm={(date, reason) => {
-            setBlocked((bs) => [
-              ...bs,
-              { id: `bd_${Date.now()}`, date, reason, created_at: new Date().toISOString() },
-            ])
-            toast(`${formatDateShort(date)} blocked out`)
-            setBlockingOpen(false)
-          }}
+          onConfirm={handleBlockDate}
         />
       )}
     </>
@@ -350,7 +416,7 @@ function CancelDialog({
   onClose,
   onConfirm,
 }: {
-  booking: Booking
+  booking: AdminBooking
   onClose: () => void
   onConfirm: (reason: string) => void
 }) {

@@ -250,12 +250,14 @@ export function AdminButton({
   type = 'button',
   variant = 'primary',
   className = '',
+  disabled = false,
 }: {
   children: ReactNode
   onClick?: () => void
   type?: 'button' | 'submit'
   variant?: 'primary' | 'secondary' | 'ghost'
   className?: string
+  disabled?: boolean
 }) {
   const tone =
     variant === 'primary'
@@ -267,7 +269,8 @@ export function AdminButton({
     <button
       type={type}
       onClick={onClick}
-      className={`inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 font-label-sm text-label-sm transition-colors ${tone} ${className}`}
+      disabled={disabled}
+      className={`inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 font-label-sm text-label-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${tone} ${className}`}
     >
       {children}
     </button>

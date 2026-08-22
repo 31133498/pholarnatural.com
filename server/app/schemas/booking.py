@@ -1,8 +1,8 @@
 from uuid import UUID
+from typing import Any, List, Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, model_validator
 from datetime import date, time, datetime
-from typing import List, Optional
 
 class BookingCreate(BaseModel):
     service_id: UUID
@@ -73,6 +73,46 @@ class BookingCancelResponse(BaseModel):
     cancellation_reason: Optional[str]
 
     model_config = {"from_attributes": True}
+
+
+class AdminBookingResponse(BaseModel):
+    id: UUID
+    service_id: UUID
+    service_name: str
+    customer_name: str
+    customer_email: str
+    customer_phone: Optional[str] = None
+    booking_date: date
+    start_time: time
+    end_time: time
+    status: str
+    deposit_cents: int
+    cancellation_reason: Optional[str] = None
+    reference: str
+
+    model_config = {"from_attributes": True}
+
+    @model_validator(mode='before')
+    @classmethod
+    def _from_orm(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return data
+        svc = getattr(data, 'service', None)
+        return {
+            'id': data.id,
+            'service_id': data.service_id,
+            'service_name': svc.name if svc else '—',
+            'customer_name': data.customer_name,
+            'customer_email': data.customer_email,
+            'customer_phone': getattr(data, 'customer_phone', None),
+            'booking_date': data.booking_date,
+            'start_time': data.start_time,
+            'end_time': data.end_time,
+            'status': data.status,
+            'deposit_cents': data.deposit_cents,
+            'cancellation_reason': getattr(data, 'cancellation_reason', None),
+            'reference': f"PN-{str(data.id)[:8].upper()}",
+        }
 
 
 # ----- ORDERS -----

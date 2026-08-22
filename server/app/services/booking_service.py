@@ -2,7 +2,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from app.services.payment_gateway import PaymentGateway
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, date, time, timedelta, timezone
 from fastapi import HTTPException, status
 
@@ -18,16 +18,15 @@ CLOSE_TIME = time(17, 0)
 DEPOSIT_RATE = 0.1
 
 def get_bookings(db: Session, filter_date: Optional[date] = None, status: Optional[str] = None):
-    """Fetch bookings with optional filtering."""
-    query = db.query(Booking)
+    """Fetch bookings with optional filtering, eagerly loading service for admin response."""
+    query = db.query(Booking).options(joinedload(Booking.service))
     if filter_date:
         query = query.filter(Booking.booking_date == filter_date)
     if status:
         query = query.filter(Booking.status == status)
-    # Order by most recent bookings first
     return query.order_by(Booking.booking_date.desc(), Booking.start_time.asc()).all()
 
-def update_booking_status(db: Session, booking_id: int, new_status: str):
+def update_booking_status(db: Session, booking_id: UUID, new_status: str):
     """Confirm or Cancel a booking."""
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
@@ -169,7 +168,7 @@ def block_date(db: Session, block_in: BlockedDateCreate):
     db.refresh(db_block)
     return db_block
 
-def unblock_date(db: Session, blocked_id: int):
+def unblock_date(db: Session, blocked_id: UUID):
     """Remove a block from a date."""
     db_block = db.query(BlockedDate).filter(BlockedDate.id == blocked_id).first()
     if not db_block:
