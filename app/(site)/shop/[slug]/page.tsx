@@ -11,8 +11,13 @@ import { SITE_URL, CURRENCY } from '@/lib/config'
 
 /** Prerender known product pages at build time. Falls back to on-demand for unknown slugs. */
 export async function generateStaticParams() {
-  const slugs = await getProductSlugs()
-  return slugs.map((slug) => ({ slug }))
+  try {
+    const slugs = await getProductSlugs()
+    return slugs.map((slug) => ({ slug }))
+  } catch {
+    // API unreachable at build time (e.g. backend redeploying) — render on-demand instead.
+    return []
+  }
 }
 
 /**

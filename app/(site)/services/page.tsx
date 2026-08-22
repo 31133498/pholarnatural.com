@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 }
 
 export default async function ServicesPage() {
-  const services = await getServices()
+  const services = await getServices().catch(() => [] as import('@/lib/types').Service[])
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-16 md:px-16">

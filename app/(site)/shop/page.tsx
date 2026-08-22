@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 }
 
 export default async function ShopPage() {
-  const products = await getProducts()
+  const products = await getProducts().catch(() => [] as import('@/lib/types').Product[])
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-16 md:px-16">

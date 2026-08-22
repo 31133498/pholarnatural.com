@@ -49,7 +49,9 @@ export interface BookingCancelResponse {
 // ─── Public functions ─────────────────────────────────────────────────────────
 
 export async function getBlockedDates(): Promise<string[]> {
-  const raw = await apiClient<RawBlockedDate[]>('/api/v1/bookings/blocked-dates')
+  const raw = await apiClient<RawBlockedDate[]>('/api/v1/bookings/blocked-dates', {
+    next: { revalidate: 300 },
+  })
   return raw.map((b) => b.date)
 }
 
