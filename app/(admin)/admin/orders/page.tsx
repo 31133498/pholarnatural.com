@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Receipt, Eye, ArrowRight, Loader2 } from 'lucide-react'
+import { Receipt, Eye, Loader2 } from 'lucide-react'
 import {
   PageHeader,
   StatusBadge,
@@ -21,12 +21,15 @@ const STATUS_FLOW = ['paid', 'confirmed', 'processing', 'shipped', 'delivered'] 
 type PipelineStatus = (typeof STATUS_FLOW)[number]
 type Filter = 'all' | PipelineStatus | 'cancelled' | 'pending'
 
+const ALL_STATUSES = ['pending', 'paid', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'] as const
+
 /** Order management (doc §1.14.5). */
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<AdminOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>('all')
   const [viewing, setViewing] = useState<AdminOrder | null>(null)
+  const [updating, setUpdating] = useState<string | null>(null)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -44,22 +47,18 @@ export default function AdminOrdersPage() {
     [orders, filter],
   )
 
-  const nextStatus = (status: string): PipelineStatus | null => {
-    const i = STATUS_FLOW.indexOf(status as PipelineStatus)
-    if (i === -1 || i === STATUS_FLOW.length - 1) return null
-    return STATUS_FLOW[i + 1]
-  }
-
-  async function advance(order: AdminOrder) {
-    const next = nextStatus(order.status)
-    if (!next) return
+  async function setStatus(order: AdminOrder, newStatus: string) {
+    if (newStatus === order.status) return
+    setUpdating(order.id)
     try {
-      await updateOrderStatus(order.id, next)
-      setOrders((os) => os.map((o) => (o.id === order.id ? { ...o, status: next } : o)))
-      setViewing((v) => (v?.id === order.id ? { ...v, status: next } : v))
-      toast(`${order.order_number} marked ${next}`)
+      await updateOrderStatus(order.id, newStatus)
+      setOrders((os) => os.map((o) => (o.id === order.id ? { ...o, status: newStatus } : o)))
+      setViewing((v) => (v?.id === order.id ? { ...v, status: newStatus } : v))
+      toast(`${order.order_number} → ${newStatus}`)
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Update failed', 'error')
+    } finally {
+      setUpdating(null)
     }
   }
 
@@ -108,47 +107,41 @@ export default function AdminOrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {visible.map((o) => {
-              const next = nextStatus(o.status)
-              return (
-                <tr key={o.id}>
-                  <Td className="font-semibold text-primary">{o.order_number}</Td>
-                  <Td>
-                    <span className="block font-semibold text-on-surface">{o.customer_name}</span>
-                    <span className="block text-[12px]">{o.customer_email}</span>
-                  </Td>
-                  <Td>{o.items.reduce((s, i) => s + i.quantity, 0)}</Td>
-                  <Td className="font-semibold text-on-surface">{formatPrice(o.total_cents)}</Td>
-                  <Td>{formatDateShort(o.created_at.slice(0, 10))}</Td>
-                  <Td>
-                    <StatusBadge status={o.status} />
-                  </Td>
-                  <Td>
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setViewing(o)}
-                        aria-label={`View order ${o.order_number}`}
-                        className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-primary"
-                      >
-                        <Eye className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                      {next && (
-                        <button
-                          type="button"
-                          onClick={() => advance(o)}
-                          aria-label={`Mark order ${o.order_number} as ${next}`}
-                          title={`Mark as ${next}`}
-                          className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-primary/10 hover:text-primary"
-                        >
-                          <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                        </button>
-                      )}
-                    </div>
-                  </Td>
-                </tr>
-              )
-            })}
+            {visible.map((o) => (
+              <tr key={o.id}>
+                <Td className="font-semibold text-primary">{o.order_number}</Td>
+                <Td>
+                  <span className="block font-semibold text-on-surface">{o.customer_name}</span>
+                  <span className="block text-[12px]">{o.customer_email}</span>
+                </Td>
+                <Td>{o.items.reduce((s, i) => s + i.quantity, 0)}</Td>
+                <Td className="font-semibold text-on-surface">{formatPrice(o.total_cents)}</Td>
+                <Td>{formatDateShort(o.created_at.slice(0, 10))}</Td>
+                <Td>
+                  <select
+                    value={o.status}
+                    disabled={updating === o.id}
+                    onChange={(e) => setStatus(o, e.target.value)}
+                    aria-label={`Status for order ${o.order_number}`}
+                    className="rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-label-sm text-[13px] capitalize text-on-surface focus:border-primary focus:outline-none disabled:opacity-50"
+                  >
+                    {ALL_STATUSES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </Td>
+                <Td>
+                  <button
+                    type="button"
+                    onClick={() => setViewing(o)}
+                    aria-label={`View order ${o.order_number}`}
+                    className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-primary"
+                  >
+                    <Eye className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </Td>
+              </tr>
+            ))}
           </tbody>
         </TableWrap>
       )}
@@ -157,8 +150,8 @@ export default function AdminOrdersPage() {
         <OrderModal
           order={viewing}
           onClose={() => setViewing(null)}
-          onAdvance={() => advance(viewing)}
-          nextStatus={nextStatus(viewing.status)}
+          onSetStatus={(s) => setStatus(viewing, s)}
+          updating={updating === viewing.id}
         />
       )}
     </>
@@ -168,14 +161,15 @@ export default function AdminOrdersPage() {
 function OrderModal({
   order,
   onClose,
-  onAdvance,
-  nextStatus,
+  onSetStatus,
+  updating,
 }: {
   order: AdminOrder
   onClose: () => void
-  onAdvance: () => void
-  nextStatus: string | null
+  onSetStatus: (status: string) => void
+  updating: boolean
 }) {
+  const [selectedStatus, setSelectedStatus] = useState(order.status)
   const addr = order.shipping_address
 
   return (
@@ -252,42 +246,33 @@ function OrderModal({
           </div>
         </section>
 
-        {/* Status flow (doc §1.14.5) */}
+        {/* Status update (doc §1.14.5) */}
         <section className="border-t border-outline-variant pt-4">
           <h3 className="mb-3 font-label-sm text-label-sm font-bold uppercase text-primary">
-            Fulfilment
+            Update status
           </h3>
-          <ol className="mb-4 flex flex-wrap items-center gap-2">
-            {STATUS_FLOW.map((s, i) => {
-              const currentIndex = STATUS_FLOW.indexOf(order.status as PipelineStatus)
-              const done = currentIndex >= i && currentIndex !== -1
-              return (
-                <li key={s} className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-3 py-1 font-label-sm text-[11px] font-bold uppercase ${
-                      done ? 'bg-primary text-white' : 'bg-surface-container-high text-on-surface-variant'
-                    }`}
-                  >
-                    {s}
-                  </span>
-                  {i < STATUS_FLOW.length - 1 && <span className="h-px w-4 bg-outline-variant" aria-hidden="true" />}
-                </li>
-              )
-            })}
-          </ol>
-
-          {nextStatus ? (
-            <AdminButton onClick={onAdvance}>
-              Mark as {nextStatus}
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={selectedStatus}
+              disabled={updating}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="flex-1 rounded-xl border border-outline bg-surface-container-lowest px-4 py-3 font-body-md text-body-md capitalize text-on-surface focus:border-primary focus:outline-none disabled:opacity-50"
+            >
+              {ALL_STATUSES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <AdminButton
+              onClick={() => onSetStatus(selectedStatus)}
+              disabled={updating || selectedStatus === order.status}
+              className="shrink-0"
+            >
+              {updating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : 'Save'}
             </AdminButton>
-          ) : (
-            <p className="font-body-md text-body-md text-on-surface-variant">
-              {order.status === 'delivered'
-                ? 'Order delivered — pipeline complete.'
-                : 'This order is not currently in the fulfilment pipeline.'}
-            </p>
-          )}
+          </div>
+          <p className="mt-2 font-body-md text-[12px] text-on-surface-variant">
+            Changing to <strong>confirmed</strong>, <strong>processing</strong>, <strong>shipped</strong>, or <strong>delivered</strong> sends the customer an email.
+          </p>
         </section>
       </div>
     </Modal>
