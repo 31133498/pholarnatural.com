@@ -4,26 +4,28 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Receipt, DollarSign, CalendarDays, Package, Plus, Scissors } from 'lucide-react'
 import { PageHeader, StatCard, StatusBadge, TableWrap, Th, Td, EmptyState } from '@/components/admin/ui'
-import { getDashboardStats, serviceById } from '@/lib/data'
+import { getDashboardStats } from '@/lib/api/admin'
+import type { DashboardStats } from '@/lib/api/admin'
 import { formatPrice, formatDateShort, formatTime } from '@/lib/format'
-import type { Booking, Order } from '@/lib/types'
 
-interface Stats {
-  orders_today: number
-  revenue_today_cents: number
-  revenue_total_cents: number
-  bookings_today: number
-  recent_orders: Order[]
-  upcoming_bookings: Booking[]
-}
-
-/** Admin dashboard home (doc §1.14.1). Mirrors `GET /api/admin/dashboard`. */
+/** Admin dashboard home (doc §1.14.1). Wired to GET /api/v1/admin/dashboard. */
 export default function AdminDashboardPage() {
-  const [stats, setStats] = useState<Stats | null>(null)
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    getDashboardStats().then(setStats)
+    getDashboardStats()
+      .then(setStats)
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load dashboard.'))
   }, [])
+
+  if (error) {
+    return (
+      <div className="rounded-2xl bg-error-container p-6 font-body-md text-body-md text-on-error-container">
+        {error}
+      </div>
+    )
+  }
 
   if (!stats) {
     return (
@@ -163,7 +165,7 @@ export default function AdminDashboardPage() {
                 {stats.upcoming_bookings.map((b) => (
                   <tr key={b.id}>
                     <Td className="font-semibold text-on-surface">{b.customer_name}</Td>
-                    <Td>{serviceById(b.service_id)?.name ?? '—'}</Td>
+                    <Td>{b.service_name}</Td>
                     <Td>
                       {formatDateShort(b.booking_date)}
                       <span className="block text-[12px]">{formatTime(b.start_time)}</span>

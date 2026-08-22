@@ -5,10 +5,12 @@ from datetime import timedelta
 from pydantic import BaseModel
 
 from app.schemas.admin import AdminCreate, AdminResponse
+from app.schemas.system import DashboardStats
 from app.api.dependencies import get_db, get_current_admin
 from app.core import security
 from app.core.config import settings
 from app.models.admin import AdminUser
+from app.services import system_service
 
 router = APIRouter()
 
@@ -42,10 +44,23 @@ def login_for_access_token(
     
     return {"access_token": access_token, "token_type": "bearer"}
 
+@router.post("/logout")
+def logout():
+    """Sign out. JWT is stateless — the client clears the token; this endpoint returns 200."""
+    return {"message": "Logged out"}
+
 @router.get("/me")
 def get_admin_profile(current_admin: AdminUser = Depends(get_current_admin)):
     """A protected test route to verify the token works."""
     return {"email": current_admin.email, "is_active": current_admin.is_active}
+
+@router.get("/dashboard", response_model=DashboardStats)
+def get_dashboard(
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    """Dashboard stats: orders/revenue/bookings today, recent orders, upcoming bookings."""
+    return system_service.get_dashboard_stats(db)
 
 @router.post("/register", response_model=AdminResponse, status_code=status.HTTP_201_CREATED)
 def register_admin(admin_in: AdminCreate, db: Session = Depends(get_db)):

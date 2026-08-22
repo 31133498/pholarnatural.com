@@ -28,9 +28,28 @@ class TestMessage(BaseModel):
     message: str
 
 # ----- DASHBOARD -----
+
+class DashboardOrder(BaseModel):
+    id: str
+    order_number: str
+    customer_name: str
+    total_cents: int
+    status: str
+    created_at: str
+
+class DashboardBooking(BaseModel):
+    id: str
+    customer_name: str
+    service_id: str
+    service_name: str
+    booking_date: str
+    start_time: str
+    status: str
+
 class DashboardStats(BaseModel):
     orders_today: int
     revenue_today_cents: int
+    revenue_total_cents: int
     bookings_today: int
-    recent_orders: List[dict] # We'll return simplified dicts for the dashboard
-    upcoming_bookings: List[dict]
+    recent_orders: List[DashboardOrder]
+    upcoming_bookings: List[DashboardBooking]

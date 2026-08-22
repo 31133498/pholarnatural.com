@@ -4,28 +4,34 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Lock, AlertCircle, ArrowLeft, ShieldAlert } from 'lucide-react'
+import { Lock, AlertCircle, ArrowLeft, Loader2 } from 'lucide-react'
 import { Field } from '@/components/FormField'
-import { useAdminAuth, DEMO_PASSPHRASE } from '@/context/AdminAuthContext'
+import { useAdminAuth } from '@/context/AdminAuthContext'
 
 /** Admin sign-in (doc §1.14.1 / §2.0 task 4.2). */
 export default function AdminLoginPage() {
   const router = useRouter()
   const { signIn, authenticated, ready } = useAdminAuth()
-  const [passphrase, setPassphrase] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  // Already signed in — do not make them do it twice.
   useEffect(() => {
     if (ready && authenticated) router.replace('/admin')
   }, [ready, authenticated, router])
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (signIn(passphrase)) {
+    setError(null)
+    setLoading(true)
+    try {
+      await signIn(email, password)
       router.replace('/admin')
-    } else {
-      setError('That passphrase is not correct.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign-in failed.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -61,42 +67,44 @@ export default function AdminLoginPage() {
             )}
 
             <Field
-              label="Passphrase"
+              label="Email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value)
+                setError(null)
+              }}
+              autoComplete="username email"
+              placeholder="admin@pholarnatural.com"
+            />
+
+            <Field
+              label="Password"
               type="password"
               required
-              value={passphrase}
+              value={password}
               onChange={(e) => {
-                setPassphrase(e.target.value)
+                setPassword(e.target.value)
                 setError(null)
               }}
               autoComplete="current-password"
-              placeholder="Enter your passphrase"
+              placeholder="••••••••"
             />
 
             <button
               type="submit"
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-4 font-label-sm text-label-sm text-white transition-opacity hover:opacity-90"
+              disabled={loading}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-4 font-label-sm text-label-sm text-white transition-opacity hover:opacity-90 disabled:opacity-60"
             >
-              <Lock className="h-4 w-4" aria-hidden="true" />
-              Sign In
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Lock className="h-4 w-4" aria-hidden="true" />
+              )}
+              {loading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
-
-          {/*
-            The demo passphrase is printed here on purpose. It is already readable in the JS
-            bundle, so hiding it would only mislead whoever is reviewing the build.
-          */}
-          <p className="mt-6 flex items-start gap-2 rounded-xl bg-secondary-container/40 p-4 font-body-md text-[12px] text-on-surface">
-            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-secondary" aria-hidden="true" />
-            <span>
-              <strong>Demo gate, not real security.</strong> The passphrase is{' '}
-              <code className="rounded bg-surface-container-high px-1.5 py-0.5 font-mono">
-                {DEMO_PASSPHRASE}
-              </code>
-              . It is checked in the browser and protects nothing. Real authentication arrives with
-              the API in week 2.
-            </span>
-          </p>
         </div>
       </div>
     </div>

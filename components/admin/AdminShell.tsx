@@ -15,7 +15,6 @@ import {
   LogOut,
   Menu,
   X,
-  ShieldAlert,
   ExternalLink,
 } from 'lucide-react'
 import { useAdminAuth } from '@/context/AdminAuthContext'
@@ -150,16 +149,6 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           </button>
           <span className="font-headline-md text-body-lg font-bold text-primary">Admin</span>
         </header>
-
-        {/* Never let this look like a secured area. */}
-        <p className="flex items-start gap-2 border-b border-secondary/30 bg-secondary-container/40 px-4 py-2 font-body-md text-[12px] text-on-surface md:px-8">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-secondary" aria-hidden="true" />
-          <span>
-            <strong>Demo gate, not real security.</strong> There is no backend yet — this passphrase
-            check runs in the browser and protects nothing. Real authentication ships with the API
-            in week 2.
-          </span>
-        </p>
 
         <main id="admin-main" className="min-w-0 flex-1 p-4 md:p-8">
           {children}
