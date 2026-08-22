@@ -105,6 +105,13 @@ export default function AdminLoginPage() {
               {loading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
+
+          <p className="mt-6 text-center font-body-md text-[13px] text-on-surface-variant">
+            Need an account?{' '}
+            <Link href="/admin/register" className="text-primary underline underline-offset-4 hover:opacity-80">
+              Register
+            </Link>
+          </p>
         </div>
       </div>
     </div>

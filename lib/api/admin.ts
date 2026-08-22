@@ -40,6 +40,22 @@ export async function adminLogout(): Promise<void> {
   await apiClient('/api/v1/admin/logout', { method: 'POST' }).catch(() => {})
 }
 
+export async function adminRegister(
+  email: string,
+  password: string,
+  secretKey: string,
+): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/admin/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, secret_key: secretKey }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(typeof data?.detail === 'string' ? data.detail : `HTTP ${res.status}`)
+  }
+}
+
 export interface DashboardOrder {
   id: string
   order_number: string

@@ -42,11 +42,11 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const { authenticated, ready, signOut } = useAdminAuth()
   const [open, setOpen] = useState(false)
 
-  const isLoginPage = pathname === '/admin/login'
+  const isPublicPage = pathname === '/admin/login' || pathname === '/admin/register'
 
   useEffect(() => {
-    if (ready && !authenticated && !isLoginPage) router.replace('/admin/login')
-  }, [ready, authenticated, isLoginPage, router])
+    if (ready && !authenticated && !isPublicPage) router.replace('/admin/login')
+  }, [ready, authenticated, isPublicPage, router])
 
   // Close the sidebar on navigation. Compared during render rather than in an effect, so the
   // new page never paints with the drawer still over it.
@@ -56,7 +56,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     setOpen(false)
   }
 
-  if (isLoginPage) return <>{children}</>
+  if (isPublicPage) return <>{children}</>
 
   if (!ready || !authenticated) {
     return (
