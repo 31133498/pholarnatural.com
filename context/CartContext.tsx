@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from 'react'
 import type { CartItem, Product, ProductVariant } from '@/lib/types'
-import { shippingFor } from '@/lib/format'
 import { useHydrated } from '@/lib/use-hydrated'
 
 const STORAGE_KEY = 'pholar-cart-v1'
@@ -20,8 +19,6 @@ interface CartContextValue {
   /** Total number of units, for the navbar badge. */
   count: number
   subtotalCents: number
-  shippingCents: number
-  totalCents: number
   /**
    * True once localStorage has been read. Components must gate cart-dependent UI on this to
    * avoid a hydration mismatch — the server renders an empty cart, the browser may not have one.
@@ -138,13 +135,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<CartContextValue>(() => {
     const subtotalCents = items.reduce((s, i) => s + i.unit_price_cents * i.quantity, 0)
-    const shippingCents = shippingFor(subtotalCents)
     return {
       items,
       count: items.reduce((s, i) => s + i.quantity, 0),
       subtotalCents,
-      shippingCents,
-      totalCents: subtotalCents + shippingCents,
       hydrated,
       addItem,
       removeItem,

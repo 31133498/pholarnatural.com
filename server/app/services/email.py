@@ -185,6 +185,7 @@ def order_confirmation_email(order) -> tuple[str, str]:
         f'<tr><td colspan="2" style="padding:12px 0 4px;font-size:14px;color:#6B7280;border-top:1px solid #E5E7EB;font-family:{_FONT};">Subtotal</td><td style="padding:12px 0 4px;font-size:14px;color:#1B1D2F;text-align:right;border-top:1px solid #E5E7EB;font-family:{_FONT};">{_cad(order.subtotal_cents)}</td></tr>'
         f'{discount_row}'
         f'<tr><td colspan="2" style="padding:4px 0;font-size:14px;color:#6B7280;font-family:{_FONT};">Shipping</td><td style="padding:4px 0;font-size:14px;color:#1B1D2F;text-align:right;font-family:{_FONT};">{shipping_display}</td></tr>'
+        f'<tr><td colspan="2" style="padding:4px 0;font-size:14px;color:#6B7280;font-family:{_FONT};">HST</td><td style="padding:4px 0;font-size:14px;color:#1B1D2F;text-align:right;font-family:{_FONT};">{_cad(order.tax_cents)}</td></tr>'
         f'<tr><td colspan="2" style="padding:14px 0 0;font-size:17px;font-weight:700;color:#1B1D2F;border-top:2px solid #1B1D2F;font-family:{_FONT};">Total</td><td style="padding:14px 0 0;font-size:17px;font-weight:700;color:#2563EB;text-align:right;border-top:2px solid #1B1D2F;font-family:{_FONT};">{_cad(order.total_cents)}</td></tr>'
         f'</table>'
         f'<div style="margin:28px 0 0;padding:20px;background-color:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;">'

@@ -41,6 +41,7 @@ class Order(Base):
     subtotal_cents = Column(Integer, nullable=False)
     shipping_cents = Column(Integer, nullable=False, default=0)
     discount_cents = Column(Integer, nullable=False, default=0)
+    tax_cents = Column(Integer, nullable=False, default=0)
     total_cents = Column(Integer, nullable=False)
     
     # Valid statuses: pending, paid, shipped, cancelled, refunded

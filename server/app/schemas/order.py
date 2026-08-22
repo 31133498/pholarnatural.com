@@ -33,9 +33,10 @@ class OrderResponse(BaseModel):
     subtotal_cents: int
     shipping_cents: int
     discount_cents: int
+    tax_cents: int = 0
     total_cents: int
     status: str
-    
+
     model_config = {"from_attributes": True}
 
 class CheckoutResponse(BaseModel):
@@ -92,6 +93,7 @@ class AdminOrderResponse(BaseModel):
     subtotal_cents: int
     shipping_cents: int
     discount_cents: int
+    tax_cents: int = 0
     total_cents: int
     status: str
     created_at: datetime

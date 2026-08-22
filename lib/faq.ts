@@ -96,11 +96,11 @@ export const FAQS: FaqEntry[] = [
       'Orders are processed within 1–2 business days. Canadian orders then typically arrive in 3–7 business days. International orders take 7–14 business days depending on destination and customs.',
   },
   {
-    id: 'faq-free-shipping',
+    id: 'faq-shipping-rates',
     category: 'Shipping',
-    question: 'Do you offer free shipping?',
+    question: 'How much does shipping cost?',
     answer:
-      'Yes — orders over CAD $50 ship free. Below that a flat rate applies, shown at checkout before you pay.',
+      'Shipping rates are based on your destination country and are always shown at checkout before you pay. We ship to Canada, the United States, the United Kingdom, and internationally.',
   },
   {
     id: 'faq-international',

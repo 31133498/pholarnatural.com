@@ -1,4 +1,4 @@
-import { CURRENCY, DEPOSIT_RATE, FREE_SHIPPING_THRESHOLD_CENTS, FLAT_SHIPPING_CENTS } from './config'
+import { CURRENCY, DEPOSIT_RATE } from './config'
 import type { Cents } from './types'
 
 /**
@@ -27,16 +27,6 @@ export function formatPriceShort(cents: Cents): string {
 /** doc §1.6.4 — 10% deposit, rounded to the nearest cent. */
 export function depositFor(priceCents: Cents): Cents {
   return Math.round(priceCents * DEPOSIT_RATE)
-}
-
-/** doc §1.2.6 — free over CAD $50, flat rate below. */
-export function shippingFor(subtotalCents: Cents): Cents {
-  if (subtotalCents === 0) return 0
-  return subtotalCents >= FREE_SHIPPING_THRESHOLD_CENTS ? 0 : FLAT_SHIPPING_CENTS
-}
-
-export function amountToFreeShipping(subtotalCents: Cents): Cents {
-  return Math.max(0, FREE_SHIPPING_THRESHOLD_CENTS - subtotalCents)
 }
 
 /** `60` → `"1 hr"`, `90` → `"1 hr 30 min"`, `45` → `"45 min"` */
@@ -92,4 +82,3 @@ export function addMinutes(time24: string, minutes: number): string {
   return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
-export { FREE_SHIPPING_THRESHOLD_CENTS }

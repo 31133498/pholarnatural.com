@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Lock, AlertCircle, ArrowLeft, Loader2, Tag, X } from 'lucide-react'
 import { Field, FieldSet } from '@/components/FormField'
 import { useCart } from '@/context/CartContext'
@@ -11,6 +11,22 @@ import { CURRENCY } from '@/lib/config'
 import { createOrder } from '@/lib/api/orders'
 import { validateDiscount } from '@/lib/api/discounts'
 import type { ShippingAddress } from '@/lib/types'
+
+type RateConfig = {
+  shipping_rate_domestic_cents: number
+  shipping_rate_us_cents: number
+  shipping_rate_uk_cents: number
+  shipping_rate_international_cents: number
+  tax_rate_percent: number
+}
+
+const RATE_DEFAULTS: RateConfig = {
+  shipping_rate_domestic_cents: 995,
+  shipping_rate_us_cents: 1499,
+  shipping_rate_uk_cents: 1999,
+  shipping_rate_international_cents: 2499,
+  tax_rate_percent: 13,
+}
 
 type Errors = Partial<Record<keyof ShippingAddress | 'email', string>>
 
@@ -25,13 +41,31 @@ const EMPTY: ShippingAddress = {
 }
 
 export default function CheckoutPage() {
-  const { items, subtotalCents, shippingCents, hydrated, clear } = useCart()
+  const { items, subtotalCents, hydrated, clear } = useCart()
 
   const [address, setAddress] = useState<ShippingAddress>(EMPTY)
   const [email, setEmail] = useState('')
   const [errors, setErrors] = useState<Errors>({})
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+
+  const [rateConfig, setRateConfig] = useState<RateConfig>(RATE_DEFAULTS)
+
+  useEffect(() => {
+    const base = process.env.NEXT_PUBLIC_API_URL ?? ''
+    fetch(`${base}/api/v1/settings/public`)
+      .then((r) => r.json())
+      .then((d) =>
+        setRateConfig({
+          shipping_rate_domestic_cents: parseInt(d.shipping_rate_domestic_cents) || RATE_DEFAULTS.shipping_rate_domestic_cents,
+          shipping_rate_us_cents: parseInt(d.shipping_rate_us_cents) || RATE_DEFAULTS.shipping_rate_us_cents,
+          shipping_rate_uk_cents: parseInt(d.shipping_rate_uk_cents) || RATE_DEFAULTS.shipping_rate_uk_cents,
+          shipping_rate_international_cents: parseInt(d.shipping_rate_international_cents) || RATE_DEFAULTS.shipping_rate_international_cents,
+          tax_rate_percent: parseFloat(d.tax_rate_percent) || RATE_DEFAULTS.tax_rate_percent,
+        })
+      )
+      .catch(() => {})
+  }, [])
 
   const [discountCode, setDiscountCode] = useState('')
   const [discountValidating, setDiscountValidating] = useState(false)
@@ -64,8 +98,18 @@ export default function CheckoutPage() {
   }
 
   const discountedSubtotal = subtotalCents - (appliedDiscount?.discount_cents ?? 0)
-  const effectiveShippingCents = discountedSubtotal >= 5000 ? 0 : shippingCents
-  const effectiveTotalCents = discountedSubtotal + effectiveShippingCents
+
+  function shippingCentsFor(country: string): number {
+    const c = country.trim().toLowerCase()
+    if (c === 'canada' || c === 'ca') return rateConfig.shipping_rate_domestic_cents
+    if (c === 'united states' || c === 'us' || c === 'usa') return rateConfig.shipping_rate_us_cents
+    if (c === 'united kingdom' || c === 'uk' || c === 'gb' || c === 'great britain') return rateConfig.shipping_rate_uk_cents
+    return rateConfig.shipping_rate_international_cents
+  }
+
+  const computedShippingCents = shippingCentsFor(address.country)
+  const taxCents = Math.round((discountedSubtotal + computedShippingCents) * rateConfig.tax_rate_percent / 100)
+  const effectiveTotalCents = discountedSubtotal + computedShippingCents + taxCents
 
   const set = (key: keyof ShippingAddress) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setAddress((a) => ({ ...a, [key]: e.target.value }))
@@ -195,18 +239,18 @@ export default function CheckoutPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="font-body-md text-body-md font-semibold text-on-surface">
-                    {shippingCents === 0 ? 'Free shipping' : 'Standard shipping'}
+                    Standard shipping
                   </p>
                   <p className="font-body-md text-[13px] text-on-surface-variant">
                     Processing 1–2 business days, then 3–7 business days in transit.
                   </p>
                 </div>
                 <p className="whitespace-nowrap font-body-md text-body-md font-bold text-primary">
-                  {shippingCents === 0 ? 'Free' : formatPrice(shippingCents)}
+                  {formatPrice(computedShippingCents)}
                 </p>
               </div>
               <p className="mt-2 font-body-md text-[12px] text-on-surface-variant">
-                International rates are being finalised — see our{' '}
+                Rate is based on destination country. See our{' '}
                 <Link href="/shipping-policy" className="underline underline-offset-2">
                   shipping policy
                 </Link>
@@ -315,7 +359,11 @@ export default function CheckoutPage() {
             )}
             <div className="flex justify-between font-body-md text-body-md">
               <dt className="text-on-surface-variant">Shipping</dt>
-              <dd className="text-on-surface">{effectiveShippingCents === 0 ? 'Free' : formatPrice(effectiveShippingCents)}</dd>
+              <dd className="text-on-surface">{formatPrice(computedShippingCents)}</dd>
+            </div>
+            <div className="flex justify-between font-body-md text-body-md">
+              <dt className="text-on-surface-variant">HST ({rateConfig.tax_rate_percent}%)</dt>
+              <dd className="text-on-surface">{formatPrice(taxCents)}</dd>
             </div>
             <div className="flex justify-between border-t border-outline-variant pt-3 font-headline-md text-headline-md">
               <dt className="text-primary">Total</dt>

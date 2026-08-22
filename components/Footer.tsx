@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Mail, ShieldCheck } from 'lucide-react'
-import { InstagramIcon, FacebookIcon } from '@/components/icons/Social'
+import { InstagramIcon, FacebookIcon, TikTokIcon } from '@/components/icons/Social'
 import { BUSINESS } from '@/lib/config'
 import { SERVICES } from '@/lib/data'
 
@@ -11,9 +11,38 @@ import { SERVICES } from '@/lib/data'
  *
  * The four policy pages live in the legal bar rather than inside "Company" so that every
  * policy required by doc §1.13 is reachable from every page.
+ *
+ * Social links are fetched from admin_settings at render time (5-minute ISR cache).
+ * An icon is hidden if the corresponding URL is empty.
  */
-export default function Footer() {
+
+type SocialLinks = {
+  instagram_url: string
+  facebook_url: string
+  tiktok_url: string
+}
+
+async function getSocialLinks(): Promise<SocialLinks> {
+  try {
+    const base = process.env.NEXT_PUBLIC_API_URL ?? ''
+    const res = await fetch(`${base}/api/v1/settings/public`, {
+      next: { revalidate: 300 },
+    })
+    if (!res.ok) throw new Error('non-ok')
+    const d = await res.json()
+    return {
+      instagram_url: d.instagram_url ?? '',
+      facebook_url: d.facebook_url ?? '',
+      tiktok_url: d.tiktok_url ?? '',
+    }
+  } catch {
+    return { instagram_url: '', facebook_url: '', tiktok_url: '' }
+  }
+}
+
+export default async function Footer() {
   const year = new Date().getFullYear()
+  const social = await getSocialLinks()
 
   return (
     <footer className="border-t border-outline-variant bg-surface-container-low">
@@ -35,24 +64,45 @@ export default function Footer() {
             <span className="mt-2 block">{BUSINESS.hours}</span>
           </address>
           <ul className="flex gap-4">
-            <li>
-              <a
-                href="https://instagram.com"
-                aria-label="Pholar Natural on Instagram"
-                className="inline-flex rounded-full p-1 text-primary transition-colors hover:text-secondary"
-              >
-                <InstagramIcon className="h-5 w-5" />
-              </a>
-            </li>
-            <li>
-              <a
-                href="https://facebook.com"
-                aria-label="Pholar Natural on Facebook"
-                className="inline-flex rounded-full p-1 text-primary transition-colors hover:text-secondary"
-              >
-                <FacebookIcon className="h-5 w-5" />
-              </a>
-            </li>
+            {social.instagram_url && (
+              <li>
+                <a
+                  href={social.instagram_url}
+                  aria-label="Pholar Natural on Instagram"
+                  className="inline-flex rounded-full p-1 text-primary transition-colors hover:text-secondary"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <InstagramIcon className="h-5 w-5" />
+                </a>
+              </li>
+            )}
+            {social.facebook_url && (
+              <li>
+                <a
+                  href={social.facebook_url}
+                  aria-label="Pholar Natural on Facebook"
+                  className="inline-flex rounded-full p-1 text-primary transition-colors hover:text-secondary"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <FacebookIcon className="h-5 w-5" />
+                </a>
+              </li>
+            )}
+            {social.tiktok_url && (
+              <li>
+                <a
+                  href={social.tiktok_url}
+                  aria-label="Pholar Natural on TikTok"
+                  className="inline-flex rounded-full p-1 text-primary transition-colors hover:text-secondary"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <TikTokIcon className="h-5 w-5" />
+                </a>
+              </li>
+            )}
             <li>
               <a
                 href={`mailto:${BUSINESS.email}`}

@@ -33,8 +33,33 @@ def update_order_status(db: Session, order_id, status_in: OrderStatusUpdate):
     order.status = status_in.status
     db.commit()
 
-FREE_SHIPPING_THRESHOLD_CENTS = 5_000   # CAD $50
-STANDARD_SHIPPING_CENTS = 995           # CAD $9.95
+# Shipping defaults (overridden by admin_settings keys of the same name)
+_SHIPPING_DEFAULTS: dict[str, int] = {
+    "shipping_rate_domestic_cents": 995,    # Canada
+    "shipping_rate_us_cents": 1499,         # United States
+    "shipping_rate_uk_cents": 1999,         # United Kingdom
+    "shipping_rate_international_cents": 2499,
+}
+_TAX_RATE_DEFAULT = 13  # Ontario HST %
+
+
+def _get_shipping_cents(db: Session, country: str) -> int:
+    from app.services.settings_service import get_setting  # noqa: PLC0415
+    c = (country or "").strip().lower()
+    if c in ("canada", "ca"):
+        key = "shipping_rate_domestic_cents"
+    elif c in ("united states", "us", "usa"):
+        key = "shipping_rate_us_cents"
+    elif c in ("united kingdom", "uk", "gb", "great britain"):
+        key = "shipping_rate_uk_cents"
+    else:
+        key = "shipping_rate_international_cents"
+    return int(get_setting(db, key, str(_SHIPPING_DEFAULTS[key])))
+
+
+def _get_tax_rate(db: Session) -> float:
+    from app.services.settings_service import get_setting  # noqa: PLC0415
+    return float(get_setting(db, "tax_rate_percent", str(_TAX_RATE_DEFAULT)))
 
 
 def create_order_phase2(db: Session, order_in: OrderCreate):
@@ -87,8 +112,9 @@ def create_order_phase2(db: Session, order_in: OrderCreate):
         discount_cents = min(discount_cents, subtotal_cents)
 
     discounted_subtotal = subtotal_cents - discount_cents
-    shipping_cents = 0 if discounted_subtotal >= FREE_SHIPPING_THRESHOLD_CENTS else STANDARD_SHIPPING_CENTS
-    total_cents = discounted_subtotal + shipping_cents
+    shipping_cents = _get_shipping_cents(db, order_in.shipping_address.country)
+    tax_cents = round(discounted_subtotal * _get_tax_rate(db) / 100)
+    total_cents = discounted_subtotal + shipping_cents + tax_cents
 
     db_order = Order(
         customer_name=order_in.customer_name,
@@ -97,6 +123,7 @@ def create_order_phase2(db: Session, order_in: OrderCreate):
         subtotal_cents=subtotal_cents,
         shipping_cents=shipping_cents,
         discount_cents=discount_cents,
+        tax_cents=tax_cents,
         total_cents=total_cents,
         status="pending",
         discount_id=db_discount.id if db_discount else None,
@@ -191,18 +218,21 @@ def calculate_cart_and_checkout(db: Session, order_in: OrderCreate, payment_gate
         # Ensure we don't discount more than the subtotal
         discount_cents = min(discount_cents, subtotal_cents)
 
-    # 4. Calculate Totals (Let's assume flat $5 shipping for now)
-    shipping_cents = 500 
-    total_cents = (subtotal_cents - discount_cents) + shipping_cents
+    # 4. Calculate Totals
+    discounted_subtotal_ph2 = subtotal_cents - discount_cents
+    shipping_cents = _get_shipping_cents(db, order_in.shipping_address.country)
+    tax_cents_ph2 = round(discounted_subtotal_ph2 * _get_tax_rate(db) / 100)
+    total_cents = discounted_subtotal_ph2 + shipping_cents + tax_cents_ph2
 
     # 5. Create the Pending Order in the DB
     db_order = Order(
         customer_name=order_in.customer_name,
         customer_email=order_in.customer_email,
-        shipping_address=order_in.shipping_address.model_dump(), # Convert Pydantic to dict for JSONB
+        shipping_address=order_in.shipping_address.model_dump(),
         subtotal_cents=subtotal_cents,
         shipping_cents=shipping_cents,
         discount_cents=discount_cents,
+        tax_cents=tax_cents_ph2,
         total_cents=total_cents,
         status="pending",
         discount_id=db_discount.id if db_discount else None,
@@ -312,8 +342,9 @@ def create_order_checkout(db: Session, order_in: OrderCreate, payment_gateway: P
         discount_cents = min(discount_cents, subtotal_cents)
 
     discounted_subtotal = subtotal_cents - discount_cents
-    shipping_cents = 0 if discounted_subtotal >= FREE_SHIPPING_THRESHOLD_CENTS else STANDARD_SHIPPING_CENTS
-    total_cents = discounted_subtotal + shipping_cents
+    shipping_cents = _get_shipping_cents(db, order_in.shipping_address.country)
+    tax_cents = round((discounted_subtotal + shipping_cents) * _get_tax_rate(db) / 100)
+    total_cents = discounted_subtotal + shipping_cents + tax_cents
 
     db_order = Order(
         customer_name=order_in.customer_name,
@@ -322,6 +353,7 @@ def create_order_checkout(db: Session, order_in: OrderCreate, payment_gateway: P
         subtotal_cents=subtotal_cents,
         shipping_cents=shipping_cents,
         discount_cents=discount_cents,
+        tax_cents=tax_cents,
         total_cents=total_cents,
         status="pending",
         discount_id=db_discount.id if db_discount else None,
@@ -335,6 +367,7 @@ def create_order_checkout(db: Session, order_in: OrderCreate, payment_gateway: P
         description += f" — {db_discount.code} applied"
     if shipping_cents:
         description += f" + CAD ${shipping_cents / 100:.2f} shipping"
+    description += f" + CAD ${tax_cents / 100:.2f} HST"
 
     stripe_line_items = [{
         "price_data": {

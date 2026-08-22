@@ -1,6 +1,6 @@
 from typing import Dict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db, get_current_admin
@@ -9,6 +9,64 @@ from app.services import settings_service
 from app.services import whatsapp
 
 router = APIRouter()
+
+# ── Public (no auth) ──────────────────────────────────────────────────────────
+
+_PUBLIC_KEYS = [
+    "shipping_rate_domestic_cents",
+    "shipping_rate_us_cents",
+    "shipping_rate_uk_cents",
+    "shipping_rate_international_cents",
+    "tax_rate_percent",
+    "instagram_url",
+    "facebook_url",
+    "tiktok_url",
+    "featured_product_ids",
+    "featured_service_ids",
+    "hero_image_url",
+    "featured_image_url",
+]
+
+_PUBLIC_DEFAULTS = {
+    "shipping_rate_domestic_cents": "995",
+    "shipping_rate_us_cents": "1499",
+    "shipping_rate_uk_cents": "1999",
+    "shipping_rate_international_cents": "2499",
+    "tax_rate_percent": "13",
+    "instagram_url": "",
+    "facebook_url": "",
+    "tiktok_url": "",
+    "featured_product_ids": "",
+    "featured_service_ids": "",
+    "hero_image_url": "",
+    "featured_image_url": "",
+}
+
+
+@router.get("/settings/public")
+def get_public_settings(db: Session = Depends(get_db)):
+    """Public settings — no auth required. Returns shipping rates, tax rate, social links."""
+    all_s = settings_service.get_all_settings(db)
+    return {k: all_s.get(k, _PUBLIC_DEFAULTS.get(k, "")) for k in _PUBLIC_KEYS}
+
+
+# ── Admin (auth required) ─────────────────────────────────────────────────────
+
+
+@router.post("/settings/upload-image")
+async def upload_settings_image(
+    file: UploadFile = File(...),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    """Upload a hero or featured image to Cloudinary. Returns {url: str}."""
+    from app.services.storage_service import CloudinaryStorageService  # noqa: PLC0415
+    try:
+        storage = CloudinaryStorageService()
+        contents = await file.read()
+        url = storage.upload_image(contents, folder="settings")
+        return {"url": url}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {exc}")
 
 
 @router.get("/settings")

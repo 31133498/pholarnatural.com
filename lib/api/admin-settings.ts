@@ -25,6 +25,21 @@ export interface AdminSettingsData {
   notify_new_contact_message: boolean
   notify_low_stock: boolean
   notify_discount_maxed_out: boolean
+  // Shipping & tax
+  shipping_rate_domestic_cents: number
+  shipping_rate_us_cents: number
+  shipping_rate_uk_cents: number
+  shipping_rate_international_cents: number
+  tax_rate_percent: number
+  // Social
+  instagram_url: string
+  facebook_url: string
+  tiktok_url: string
+  // Homepage content
+  featured_product_ids: string
+  featured_service_ids: string
+  hero_image_url: string
+  featured_image_url: string
 }
 
 /** Matches _DEFAULT_ON in server/app/services/whatsapp.py. */
@@ -55,6 +70,18 @@ export async function loadAdminSettings(): Promise<AdminSettingsData> {
     notify_new_contact_message: parseBool(raw.notify_new_contact_message, 'notify_new_contact_message'),
     notify_low_stock: parseBool(raw.notify_low_stock, 'notify_low_stock'),
     notify_discount_maxed_out: parseBool(raw.notify_discount_maxed_out, 'notify_discount_maxed_out'),
+    shipping_rate_domestic_cents: Number(raw.shipping_rate_domestic_cents ?? '995'),
+    shipping_rate_us_cents: Number(raw.shipping_rate_us_cents ?? '1499'),
+    shipping_rate_uk_cents: Number(raw.shipping_rate_uk_cents ?? '1999'),
+    shipping_rate_international_cents: Number(raw.shipping_rate_international_cents ?? '2499'),
+    tax_rate_percent: Number(raw.tax_rate_percent ?? '13'),
+    instagram_url: raw.instagram_url ?? '',
+    facebook_url: raw.facebook_url ?? '',
+    tiktok_url: raw.tiktok_url ?? '',
+    featured_product_ids: raw.featured_product_ids ?? '',
+    featured_service_ids: raw.featured_service_ids ?? '',
+    hero_image_url: raw.hero_image_url ?? '',
+    featured_image_url: raw.featured_image_url ?? '',
   }
 }
 
@@ -69,8 +96,39 @@ export async function saveAdminSettings(data: AdminSettingsData): Promise<void> 
     notify_new_contact_message: String(data.notify_new_contact_message),
     notify_low_stock: String(data.notify_low_stock),
     notify_discount_maxed_out: String(data.notify_discount_maxed_out),
+    shipping_rate_domestic_cents: String(data.shipping_rate_domestic_cents),
+    shipping_rate_us_cents: String(data.shipping_rate_us_cents),
+    shipping_rate_uk_cents: String(data.shipping_rate_uk_cents),
+    shipping_rate_international_cents: String(data.shipping_rate_international_cents),
+    tax_rate_percent: String(data.tax_rate_percent),
+    instagram_url: data.instagram_url,
+    facebook_url: data.facebook_url,
+    tiktok_url: data.tiktok_url,
+    featured_product_ids: data.featured_product_ids,
+    featured_service_ids: data.featured_service_ids,
+    hero_image_url: data.hero_image_url,
+    featured_image_url: data.featured_image_url,
   }
   await apiClient('/api/v1/admin/settings', { method: 'PUT', body: payload, auth: true })
+}
+
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? ''
+
+export async function uploadSettingsImage(file: File): Promise<string> {
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem('pholar_admin_token') : null
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${BASE}/api/v1/admin/settings/upload-image`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(typeof data?.detail === 'string' ? data.detail : `HTTP ${res.status}`)
+  }
+  const { url } = await res.json()
+  return url
 }
 
 export function getWhatsAppStatus(): Promise<WhatsAppStatus> {

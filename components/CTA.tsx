@@ -1,9 +1,7 @@
 import Link from 'next/link'
-import { Truck } from 'lucide-react'
 import RevealOnScroll from '@/components/animations/RevealOnScroll'
 import { ParallaxBlob } from '@/components/animations/ParallaxSection'
 import { CURRENCY } from '@/lib/config'
-import { formatPriceShort, FREE_SHIPPING_THRESHOLD_CENTS } from '@/lib/format'
 
 /** Closing call to action (doc §1.2.6). */
 export default function CTA() {
@@ -35,11 +33,8 @@ export default function CTA() {
               </Link>
             </div>
 
-            <p className="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 font-body-md text-body-md opacity-90">
-              <Truck className="h-4 w-4" aria-hidden="true" />
-              Free shipping on orders over {CURRENCY} {formatPriceShort(FREE_SHIPPING_THRESHOLD_CENTS)}
-              <span aria-hidden="true">·</span>
-              <span>All prices in {CURRENCY}</span>
+            <p className="mt-8 font-body-md text-body-md opacity-90">
+              All prices in {CURRENCY}
             </p>
           </div>
         </RevealOnScroll>

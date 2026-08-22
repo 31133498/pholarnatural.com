@@ -3,11 +3,11 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
-import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Truck } from 'lucide-react'
+import { Minus, Plus, Trash2, ShoppingBag, ArrowRight } from 'lucide-react'
 import { useCart } from '@/context/CartContext'
 import { useToast } from '@/context/ToastContext'
-import { formatPrice, amountToFreeShipping } from '@/lib/format'
-import { CURRENCY, FREE_SHIPPING_THRESHOLD_CENTS } from '@/lib/config'
+import { formatPrice } from '@/lib/format'
+import { CURRENCY } from '@/lib/config'
 
 /**
  * Cart (doc §1.7).
@@ -17,11 +17,9 @@ import { CURRENCY, FREE_SHIPPING_THRESHOLD_CENTS } from '@/lib/config'
  * would flash "your cart is empty" at someone who has items.
  */
 export default function CartPage() {
-  const { items, subtotalCents, shippingCents, totalCents, hydrated, setQuantity, removeItem } = useCart()
+  const { items, subtotalCents, hydrated, setQuantity, removeItem } = useCart()
   const { toast } = useToast()
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
-
-  const remaining = amountToFreeShipping(subtotalCents)
 
   if (!hydrated) {
     return (
@@ -184,44 +182,15 @@ export default function CartPage() {
               <dt className="text-on-surface-variant">Subtotal</dt>
               <dd className="font-semibold text-on-surface">{formatPrice(subtotalCents)}</dd>
             </div>
-            <div className="flex justify-between font-body-md text-body-md">
-              <dt className="text-on-surface-variant">Shipping</dt>
-              <dd className="font-semibold text-on-surface">
-                {shippingCents === 0 ? 'Free' : formatPrice(shippingCents)}
-              </dd>
-            </div>
             <div className="flex justify-between border-t border-outline-variant pt-3 font-headline-md text-headline-md">
-              <dt className="text-primary">Total</dt>
-              <dd className="text-primary">{formatPrice(totalCents)}</dd>
+              <dt className="text-primary">Subtotal</dt>
+              <dd className="text-primary">{formatPrice(subtotalCents)}</dd>
             </div>
           </dl>
 
-          {remaining > 0 ? (
-            <div className="mt-6 rounded-xl bg-secondary-container/40 p-4">
-              <p className="flex items-start gap-2 font-body-md text-[13px] text-on-surface">
-                <Truck className="mt-0.5 h-4 w-4 shrink-0 text-secondary" aria-hidden="true" />
-                Add {formatPrice(remaining)} more for free shipping.
-              </p>
-              <div
-                className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-container-highest"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={FREE_SHIPPING_THRESHOLD_CENTS}
-                aria-valuenow={subtotalCents}
-                aria-label="Progress toward free shipping"
-              >
-                <div
-                  className="h-full rounded-full bg-secondary transition-all"
-                  style={{ width: `${Math.min(100, (subtotalCents / FREE_SHIPPING_THRESHOLD_CENTS) * 100)}%` }}
-                />
-              </div>
-            </div>
-          ) : (
-            <p className="mt-6 flex items-center gap-2 rounded-xl bg-primary/10 p-4 font-body-md text-[13px] text-primary">
-              <Truck className="h-4 w-4 shrink-0" aria-hidden="true" />
-              Your order ships free.
-            </p>
-          )}
+          <p className="mt-4 font-body-md text-[12px] text-on-surface-variant">
+            Shipping and taxes calculated at checkout.
+          </p>
 
           <Link
             href="/checkout"

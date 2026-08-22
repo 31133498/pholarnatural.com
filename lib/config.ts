@@ -7,12 +7,6 @@
 
 export const CURRENCY = 'CAD' as const
 
-/** doc §1.2.6 / §1.13 — free shipping over CAD $50. */
-export const FREE_SHIPPING_THRESHOLD_CENTS = 5_000
-
-/** Flat domestic rate applied below the threshold. Final rates blocked on client (doc §8.7). */
-export const FLAT_SHIPPING_CENTS = 995
-
 /** doc §1.6.4 — bookings are held with a 10% deposit. */
 export const DEPOSIT_RATE = 0.1
 

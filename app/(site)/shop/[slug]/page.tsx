@@ -158,7 +158,7 @@ export default async function ProductPage(props: PageProps<'/shop/[slug]'>) {
       )}
 
       <p className="mt-10 text-center font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
-        All prices in {CURRENCY} · Free shipping over {formatPrice(5000)} · From {formatPrice(lowest)}
+        All prices in {CURRENCY} · From {formatPrice(lowest)}
       </p>
     </div>
   )

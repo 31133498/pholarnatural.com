@@ -5,7 +5,7 @@ import PolicyPage from '@/components/PolicyPage'
 export const metadata: Metadata = {
   title: 'Shipping Policy',
   description:
-    'Pholar Natural shipping rates and timelines for Canada, the US and the UK. Free shipping on orders over CAD $50. Orders processed in 1–2 business days.',
+    'Pholar Natural shipping rates and timelines for Canada, the US and the UK. Orders processed in 1–2 business days.',
   alternates: { canonical: '/shipping-policy' },
 }
 
@@ -23,15 +23,14 @@ export default function ShippingPolicyPage() {
         email when the parcel is dispatched.
       </p>
 
-      <h2>Free shipping</h2>
+      <h2>Shipping rates</h2>
       <p>
-        Orders with a subtotal over <strong>CAD $50</strong> ship free, anywhere we deliver. Below
-        that threshold a flat rate applies, and it is always shown at checkout before you pay.
+        Shipping rates are based on your destination country and are shown at checkout before you pay.
       </p>
 
       <h2>Domestic — Canada</h2>
       <ul>
-        <li>Flat rate: CAD $9.95, or free over CAD $50</li>
+        <li>Standard rate shown at checkout</li>
         <li>Transit time: 3–7 business days after dispatch</li>
         <li>Remote and northern postal codes may take longer</li>
       </ul>

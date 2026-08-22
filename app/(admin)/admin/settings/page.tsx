@@ -18,14 +18,19 @@ import {
   PackageOpen,
   TicketPercent,
   CreditCard,
+  Truck,
+  Share2,
+  ImagePlus,
   type LucideIcon,
 } from 'lucide-react'
+import Image from 'next/image'
 import { PageHeader, AdminButton } from '@/components/admin/ui'
 import { Field } from '@/components/FormField'
 import { useToast } from '@/context/ToastContext'
 import {
   loadAdminSettings,
   saveAdminSettings,
+  uploadSettingsImage,
   getWhatsAppStatus,
   getWhatsAppQR,
   logoutWhatsApp,
@@ -285,7 +290,27 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null)
   const { toast } = useToast()
+
+  async function handleImageUpload(
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: 'hero_image_url' | 'featured_image_url',
+  ) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingKey(field)
+    try {
+      const url = await uploadSettingsImage(file)
+      set(field, url)
+      toast('Image uploaded')
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Upload failed', 'error')
+    } finally {
+      setUploadingKey(null)
+      e.target.value = ''
+    }
+  }
 
   useEffect(() => {
     loadAdminSettings()
@@ -424,15 +449,201 @@ export default function AdminSettingsPage() {
             </AdminButton>
           </section>
 
-          {/* Email — future phase */}
+          {/* Email notifications */}
           <section className="rounded-2xl border border-outline-variant bg-surface-container-lowest p-6">
             <h2 className="mb-1 flex items-center gap-2 font-headline-md text-headline-md text-primary">
               <Mail className="h-5 w-5" aria-hidden="true" />
               Email notifications
             </h2>
-            <p className="font-body-md text-body-md text-on-surface-variant">
-              Admin email alerts are planned for a future phase (Resend integration).
+            <p className="mb-1 font-body-md text-body-md text-on-surface-variant">
+              Order and booking confirmation emails are sent automatically via Resend. Configure
+              recipients in <code className="rounded bg-surface-container-high px-1.5 py-0.5 font-mono text-[12px]">ADMIN_EMAIL</code> in your server <code className="rounded bg-surface-container-high px-1.5 py-0.5 font-mono text-[12px]">.env</code>.
             </p>
+            <p className="font-body-md text-[12px] text-on-surface-variant">
+              Multiple admin recipients are supported — separate addresses with commas.
+            </p>
+          </section>
+
+          {/* Shipping & tax */}
+          <section className="rounded-2xl border border-outline-variant bg-surface-container-lowest p-6">
+            <h2 className="mb-1 flex items-center gap-2 font-headline-md text-headline-md text-primary">
+              <Truck className="h-5 w-5" aria-hidden="true" />
+              Shipping & tax
+            </h2>
+            <p className="mb-5 font-body-md text-body-md text-on-surface-variant">
+              Rates are applied at checkout based on destination country. All amounts in CAD cents (e.g. 995 = CAD $9.95).
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Canada rate (cents)"
+                type="number"
+                min={0}
+                value={settings.shipping_rate_domestic_cents}
+                hint="e.g. 995 = CAD $9.95"
+                onChange={(e) => set('shipping_rate_domestic_cents', Number(e.target.value))}
+              />
+              <Field
+                label="United States rate (cents)"
+                type="number"
+                min={0}
+                value={settings.shipping_rate_us_cents}
+                onChange={(e) => set('shipping_rate_us_cents', Number(e.target.value))}
+              />
+              <Field
+                label="United Kingdom rate (cents)"
+                type="number"
+                min={0}
+                value={settings.shipping_rate_uk_cents}
+                onChange={(e) => set('shipping_rate_uk_cents', Number(e.target.value))}
+              />
+              <Field
+                label="International rate (cents)"
+                type="number"
+                min={0}
+                value={settings.shipping_rate_international_cents}
+                onChange={(e) => set('shipping_rate_international_cents', Number(e.target.value))}
+              />
+            </div>
+            <div className="mt-4 max-w-xs">
+              <Field
+                label="Tax rate (%)"
+                type="number"
+                min={0}
+                max={100}
+                step={0.01}
+                value={settings.tax_rate_percent}
+                hint="Ontario HST default is 13"
+                onChange={(e) => set('tax_rate_percent', Number(e.target.value))}
+              />
+            </div>
+          </section>
+
+          {/* Social media */}
+          <section className="rounded-2xl border border-outline-variant bg-surface-container-lowest p-6">
+            <h2 className="mb-1 flex items-center gap-2 font-headline-md text-headline-md text-primary">
+              <Share2 className="h-5 w-5" aria-hidden="true" />
+              Social media
+            </h2>
+            <p className="mb-5 font-body-md text-body-md text-on-surface-variant">
+              Links appear in the footer. Leave blank to hide the icon.
+            </p>
+            <div className="space-y-4">
+              <Field
+                label="Instagram URL"
+                type="url"
+                value={settings.instagram_url}
+                placeholder="https://instagram.com/pholarnatural"
+                onChange={(e) => set('instagram_url', e.target.value)}
+              />
+              <Field
+                label="Facebook URL"
+                type="url"
+                value={settings.facebook_url}
+                placeholder="https://facebook.com/pholarnatural"
+                onChange={(e) => set('facebook_url', e.target.value)}
+              />
+              <Field
+                label="TikTok URL"
+                type="url"
+                value={settings.tiktok_url}
+                placeholder="https://tiktok.com/@pholarnatural"
+                onChange={(e) => set('tiktok_url', e.target.value)}
+              />
+            </div>
+          </section>
+
+          {/* Homepage content */}
+          <section className="rounded-2xl border border-outline-variant bg-surface-container-lowest p-6">
+            <h2 className="mb-1 flex items-center gap-2 font-headline-md text-headline-md text-primary">
+              <ImagePlus className="h-5 w-5" aria-hidden="true" />
+              Homepage content
+            </h2>
+            <p className="mb-5 font-body-md text-body-md text-on-surface-variant">
+              Control which products and services are featured, and upload hero images. Featured IDs are comma-separated slugs or UUIDs.
+            </p>
+
+            <div className="space-y-4">
+              <Field
+                label="Featured product IDs"
+                type="text"
+                value={settings.featured_product_ids}
+                placeholder="uuid1,uuid2"
+                hint="Comma-separated product UUIDs. Leave blank to use defaults."
+                onChange={(e) => set('featured_product_ids', e.target.value)}
+              />
+              <Field
+                label="Featured service IDs"
+                type="text"
+                value={settings.featured_service_ids}
+                placeholder="uuid1,uuid2"
+                hint="Comma-separated service UUIDs. Leave blank to use defaults."
+                onChange={(e) => set('featured_service_ids', e.target.value)}
+              />
+            </div>
+
+            {/* Hero image */}
+            <div className="mt-6">
+              <p className="mb-2 font-label-sm text-label-sm font-semibold text-on-surface">Hero image</p>
+              {settings.hero_image_url && (
+                <div className="relative mb-3 h-32 w-full overflow-hidden rounded-xl border border-outline-variant">
+                  <Image src={settings.hero_image_url} alt="Hero" fill className="object-cover" sizes="(max-width: 768px) 100vw, 600px" />
+                </div>
+              )}
+              <Field
+                label="Hero image URL"
+                type="url"
+                value={settings.hero_image_url}
+                placeholder="https://res.cloudinary.com/…"
+                onChange={(e) => set('hero_image_url', e.target.value)}
+              />
+              <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-outline-variant bg-surface-container-low px-4 py-3 font-label-sm text-label-sm text-on-surface-variant hover:border-primary hover:text-primary">
+                {uploadingKey === 'hero_image_url' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <ImagePlus className="h-4 w-4" aria-hidden="true" />
+                )}
+                Upload new hero image
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  disabled={uploadingKey !== null}
+                  onChange={(e) => handleImageUpload(e, 'hero_image_url')}
+                />
+              </label>
+            </div>
+
+            {/* Featured image */}
+            <div className="mt-6">
+              <p className="mb-2 font-label-sm text-label-sm font-semibold text-on-surface">Featured section image</p>
+              {settings.featured_image_url && (
+                <div className="relative mb-3 h-32 w-full overflow-hidden rounded-xl border border-outline-variant">
+                  <Image src={settings.featured_image_url} alt="Featured" fill className="object-cover" sizes="(max-width: 768px) 100vw, 600px" />
+                </div>
+              )}
+              <Field
+                label="Featured image URL"
+                type="url"
+                value={settings.featured_image_url}
+                placeholder="https://res.cloudinary.com/…"
+                onChange={(e) => set('featured_image_url', e.target.value)}
+              />
+              <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-outline-variant bg-surface-container-low px-4 py-3 font-label-sm text-label-sm text-on-surface-variant hover:border-primary hover:text-primary">
+                {uploadingKey === 'featured_image_url' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <ImagePlus className="h-4 w-4" aria-hidden="true" />
+                )}
+                Upload new featured image
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  disabled={uploadingKey !== null}
+                  onChange={(e) => handleImageUpload(e, 'featured_image_url')}
+                />
+              </label>
+            </div>
           </section>
 
           {/* Business hours — informational */}
