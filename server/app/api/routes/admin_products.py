@@ -1,21 +1,30 @@
+from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status, UploadFile, File
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db, get_current_admin
+from app.api.dependencies import get_db, get_current_admin, get_storage_service
 from app.models.admin import AdminUser
-from app.schemas.product import ProductResponse, ProductCreate, ProductUpdate, VariantCreate
+from app.schemas.product import ProductResponse, ProductCreate, ProductUpdate, VariantCreate, ProductImageBase
 from app.services import product_service
+from app.services.storage_service import StorageService
 
 router = APIRouter()
 
-# Note: The dependency is injected here, securing the route
+@router.get("/", response_model=List[ProductResponse])
+def list_products(
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    """List all products including inactive (Admin only)."""
+    return product_service.get_all_products(db)
+
 @router.post("/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
 def create_product(
-    product_in: ProductCreate, 
+    product_in: ProductCreate,
     db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(get_current_admin) # <--- THE LOCK
+    current_admin: AdminUser = Depends(get_current_admin),
 ):
     """Create a new product (Admin only)."""
     return product_service.create_product(db, product_in)
@@ -25,7 +34,7 @@ def update_product(
     product_id: UUID,
     product_in: ProductUpdate,
     db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(get_current_admin)
+    current_admin: AdminUser = Depends(get_current_admin),
 ):
     """Update a product (Admin only)."""
     return product_service.update_product(db, product_id, product_in)
@@ -34,7 +43,7 @@ def update_product(
 def delete_product(
     product_id: UUID,
     db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(get_current_admin)
+    current_admin: AdminUser = Depends(get_current_admin),
 ):
     """Delete a product (Admin only)."""
     product_service.delete_product(db, product_id)
@@ -45,28 +54,30 @@ def add_product_variant(
     product_id: UUID,
     variant_in: VariantCreate,
     db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(get_current_admin)
+    current_admin: AdminUser = Depends(get_current_admin),
 ):
     """Add a variant to a product (Admin only)."""
     return product_service.add_variant_to_product(db, product_id, variant_in)
 
-@router.post("/{product_id}/images", status_code=status.HTTP_201_CREATED)
+@router.post("/{product_id}/images", response_model=ProductImageBase, status_code=status.HTTP_201_CREATED)
 def upload_image(
     product_id: UUID,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(get_current_admin)
+    current_admin: AdminUser = Depends(get_current_admin),
+    storage: StorageService = Depends(get_storage_service),
 ):
-    """Upload an image for a product."""
-    return product_service.upload_product_image(db, product_id, file)
+    """Upload an image for a product via Cloudinary."""
+    return product_service.upload_product_image(db, product_id, file, storage)
 
 @router.delete("/{product_id}/images/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_image(
     product_id: UUID,
-    image_id: int,
+    image_id: UUID,
     db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(get_current_admin)
+    current_admin: AdminUser = Depends(get_current_admin),
+    storage: StorageService = Depends(get_storage_service),
 ):
-    """Delete a product image."""
-    product_service.delete_product_image(db, product_id, image_id)
+    """Delete a product image from Cloudinary and the database."""
+    product_service.delete_product_image(db, product_id, image_id, storage)
     return None

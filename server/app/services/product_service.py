@@ -11,6 +11,15 @@ from fastapi import HTTPException, status, UploadFile
 from app.models.product import Product, ProductImage, ProductVariant
 from app.schemas.product import ProductCreate, ProductUpdate, VariantCreate, VariantUpdate
 
+def get_all_products(db: Session):
+    """Fetch all products (including inactive) for the admin panel."""
+    return (
+        db.query(Product)
+        .options(selectinload(Product.images), selectinload(Product.variants))
+        .order_by(Product.created_at.desc())
+        .all()
+    )
+
 def get_active_products(
     db: Session,
     category: Optional[str] = None,
