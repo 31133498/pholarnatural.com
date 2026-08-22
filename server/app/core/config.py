@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     RESEND_API_KEY: Optional[str] = None
     DEFAULT_FROM_EMAIL: str = "onboarding@resend.dev"
 
+    # Evolution API (WhatsApp notifications via instance "pholar-notifier")
+    EVOLUTION_API_KEY: Optional[str] = None
+    EVOLUTION_API_URL: str = "http://evolution-api:8080"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

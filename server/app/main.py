@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.routes import admin_auth, orders, products, services, bookings, contact, discounts, admin_bookings, admin_orders, admin_products, admin_services, admin_discounts, admin_variants, stripe_webhook
+from app.api.routes import admin_auth, orders, products, services, bookings, contact, discounts, admin_bookings, admin_orders, admin_products, admin_services, admin_discounts, admin_variants, stripe_webhook, admin_settings
 
 app = FastAPI(title=settings.PROJECT_NAME)
 
@@ -29,6 +29,7 @@ app.include_router(admin_bookings.router, prefix="/api/v1/admin/bookings", tags=
 app.include_router(admin_services.router, prefix="/api/v1/admin/services", tags=["Admin Services"])
 app.include_router(admin_variants.router, prefix="/api/v1/admin/variants", tags=["Admin Variants"])
 app.include_router(admin_discounts.router, prefix="/api/v1/admin/discounts", tags=["Admin Discounts"])
+app.include_router(admin_settings.router, prefix="/api/v1/admin", tags=["Admin Settings"])
 
 @app.get("/")
 def read_root():

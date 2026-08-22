@@ -256,22 +256,48 @@ def calculate_cart_and_checkout(db: Session, order_in: OrderCreate, payment_gate
 
 def confirm_order_payment(db: Session, session_id: str):
     """Called by Stripe webhook to finalize the order."""
+    # Local imports avoid loading whatsapp/settings at module startup.
+    from app.services.settings_service import get_setting  # noqa: PLC0415
+    from app.services.whatsapp import notify, NotificationEvent  # noqa: PLC0415
+
     order = db.query(Order).filter(Order.stripe_session_id == session_id).first()
     if order and order.status == "pending":
         order.status = "paid"
-        
-        # Decrement stock for each item
+
+        low_stock_threshold = int(get_setting(db, "low_stock_threshold", "5"))
+
+        # Decrement stock for each item; fire low_stock alert if threshold crossed.
         for item in order.items:
             variant = db.query(ProductVariant).filter(ProductVariant.id == item.product_variant_id).first()
             if variant:
                 variant.stock_count = max(0, variant.stock_count - item.quantity)
-        
-        # Increment discount usage
+                if 0 < variant.stock_count <= low_stock_threshold:
+                    product = db.query(Product).filter(Product.id == variant.product_id).first()
+                    product_name = product.name if product else item.product_name
+                    variant_label = variant.weight_label or item.variant_label or "Default"
+                    units = variant.stock_count
+                    notify(
+                        NotificationEvent.LOW_STOCK,
+                        f"⚠️ Low Stock — {product_name}\n"
+                        f"Variant: {variant_label} · {units} unit{'s' if units != 1 else ''} remaining\n"
+                        f"pholarnatural.com/admin/products",
+                        db,
+                    )
+
+        # Increment discount usage; fire discount_maxed_out if limit just reached.
         if order.discount_id:
             discount = db.query(Discount).filter(Discount.id == order.discount_id).first()
             if discount:
                 discount.used_count += 1
-                
+                if discount.max_uses and discount.used_count >= discount.max_uses:
+                    notify(
+                        NotificationEvent.DISCOUNT_MAXED_OUT,
+                        f"🎟️ Code Maxed Out — {discount.code}\n"
+                        f"Reached usage limit: {discount.used_count} / {discount.max_uses}\n"
+                        f"pholarnatural.com/admin/discounts",
+                        db,
+                    )
+
         db.commit()
         return order
     return None

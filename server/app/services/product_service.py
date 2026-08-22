@@ -157,13 +157,32 @@ def update_variant(db: Session, variant_id: int, variant_in: VariantUpdate):
     db_variant = db.query(ProductVariant).filter(ProductVariant.id == variant_id).first()
     if not db_variant:
         raise HTTPException(status_code=404, detail="Variant not found")
-        
+
     update_data = variant_in.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_variant, key, value)
-        
+
     db.commit()
     db.refresh(db_variant)
+
+    # Fire low_stock when an admin manually adjusts stock into the warning zone.
+    if "stock_count" in update_data and db_variant.stock_count >= 0:
+        from app.services.settings_service import get_setting  # noqa: PLC0415
+        from app.services.whatsapp import notify, NotificationEvent  # noqa: PLC0415
+        threshold = int(get_setting(db, "low_stock_threshold", "5"))
+        if 0 < db_variant.stock_count <= threshold:
+            product = db.query(Product).filter(Product.id == db_variant.product_id).first()
+            product_name = product.name if product else "Unknown"
+            variant_label = db_variant.weight_label or "Default"
+            units = db_variant.stock_count
+            notify(
+                NotificationEvent.LOW_STOCK,
+                f"⚠️ Low Stock — {product_name}\n"
+                f"Variant: {variant_label} · {units} unit{'s' if units != 1 else ''} remaining\n"
+                f"pholarnatural.com/admin/products",
+                db,
+            )
+
     return db_variant
 
 def delete_variant(db: Session, variant_id: int):

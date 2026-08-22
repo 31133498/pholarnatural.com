@@ -6,8 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
-from uuid import UUID
-
+from app.models.service import Service as ServiceModel
 from app.schemas.booking import (
     BlockedDateResponse,
     BookingCreate,
@@ -18,6 +17,7 @@ from app.schemas.booking import (
     SlotInfo,
 )
 from app.services import booking_service
+from app.services.whatsapp import notify, NotificationEvent
 
 router = APIRouter()
 
@@ -45,7 +45,22 @@ def get_slots(
 @router.post("/", response_model=BookingCreateResponse, status_code=201)
 def create_booking(booking_in: BookingCreate, db: Session = Depends(get_db)):
     """Create a pending booking (Phase 2 — no Stripe payment required)."""
-    return booking_service.create_booking_phase2(db=db, booking_in=booking_in)
+    booking = booking_service.create_booking_phase2(db=db, booking_in=booking_in)
+
+    service = db.query(ServiceModel).filter(ServiceModel.id == booking.service_id).first()
+    service_name = service.name if service else "Service"
+    booking_date = booking.booking_date.strftime("%a %d %b %Y")
+    start_time = booking.start_time.strftime("%I:%M %p").lstrip("0")
+    notify(
+        NotificationEvent.NEW_BOOKING,
+        f"📅 New Booking\n"
+        f"{booking.customer_name} — {service_name}\n"
+        f"{booking_date} at {start_time}\n"
+        f"pholarnatural.com/admin/bookings",
+        db,
+    )
+
+    return booking
 
 
 @router.post("/{booking_id}/cancel", response_model=BookingCancelResponse)
@@ -55,8 +70,24 @@ def cancel_booking(
     db: Session = Depends(get_db),
 ):
     """Cancel a booking and store an optional cancellation reason."""
-    return booking_service.cancel_booking(
+    booking = booking_service.cancel_booking(
         db=db,
         booking_id=booking_id,
         cancellation_reason=cancel_in.cancellation_reason,
     )
+
+    service = db.query(ServiceModel).filter(ServiceModel.id == booking.service_id).first()
+    service_name = service.name if service else "Service"
+    reference = f"PN-{str(booking.id)[:8].upper()}"
+    booking_date = booking.booking_date.strftime("%d %b %Y")
+    reason = cancel_in.cancellation_reason or "No reason given"
+    notify(
+        NotificationEvent.BOOKING_CANCELLED,
+        f"❌ Booking Cancelled — {reference}\n"
+        f"{booking.customer_name} · {service_name} · {booking_date}\n"
+        f"Reason: {reason}\n"
+        f"pholarnatural.com/admin/bookings",
+        db,
+    )
+
+    return booking
