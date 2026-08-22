@@ -1,9 +1,12 @@
 """
 WhatsApp notification service using Evolution API instance "pholar-notifier".
 
-Public API — the ONLY entry points other code should use:
-  notify(event, message, db)          fire-and-forget alert, never raises
-  get_whatsapp_connection_status()    check Evolution API connection health
+Public API:
+  notify(event, message, db)              fire-and-forget alert, never raises
+  get_whatsapp_connection_status()        check connection health
+  get_whatsapp_qr()                       fetch QR for pairing
+  logout_whatsapp()                       disconnect instance (raises on failure)
+  send_whatsapp_notification(number, msg) low-level send (use notify() instead)
 
 Never call send_whatsapp_notification() directly from route handlers.
 """
@@ -21,14 +24,16 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+INSTANCE_NAME = "pholar-notifier"
+
 
 class NotificationEvent(str, Enum):
     NEW_ORDER = "new_order"
     NEW_BOOKING = "new_booking"
     BOOKING_CANCELLED = "booking_cancelled"
-    # NOTE: PAYMENT_FAILED is defined here but intentionally defaults to OFF
-    # until Phase 9 (Stripe) is live. Flip _DEFAULT_ON[PAYMENT_FAILED] to True
-    # and wire notify() into the Stripe webhook when going live.
+    # NOTE: PAYMENT_FAILED defaults OFF until Phase 9 (Stripe) is live.
+    # Flip _DEFAULT_ON[PAYMENT_FAILED] to True and wire notify() into the
+    # Stripe webhook when going live.
     PAYMENT_FAILED = "payment_failed"
     NEW_CONTACT_MESSAGE = "new_contact_message"
     LOW_STOCK = "low_stock"
@@ -45,10 +50,10 @@ _TOGGLE_KEY: dict[NotificationEvent, str] = {
     NotificationEvent.DISCOUNT_MAXED_OUT: "notify_discount_maxed_out",
 }
 
-# Default value used when the key has never been saved to admin_settings.
-# Matches the spec (confirmed with user 2026-08-22):
+# Default when the key has never been saved to admin_settings.
+# Confirmed with user 2026-08-22:
 #   ON  — new_order, new_booking, booking_cancelled, new_contact_message, low_stock
-#   OFF — payment_failed (flip to True when Stripe Phase 9 goes live), discount_maxed_out
+#   OFF — payment_failed (Phase 9), discount_maxed_out
 _DEFAULT_ON: dict[NotificationEvent, bool] = {
     NotificationEvent.NEW_ORDER: True,
     NotificationEvent.NEW_BOOKING: True,
@@ -60,55 +65,117 @@ _DEFAULT_ON: dict[NotificationEvent, bool] = {
 }
 
 
-def _evolution_base() -> str:
+def _base() -> str:
     return (settings.EVOLUTION_API_URL or "http://evolution-api:8080").rstrip("/")
 
 
-def send_whatsapp_notification(number: str, message: str) -> None:
-    """
-    POST text message to Evolution API.
-    Raises urllib.error.URLError / RuntimeError on failure — callers handle it.
-    Never call this directly from route handlers; use notify() instead.
-    """
-    if not settings.EVOLUTION_API_KEY:
-        raise RuntimeError("EVOLUTION_API_KEY is not configured.")
+def _headers() -> dict:
+    return {"apikey": settings.EVOLUTION_API_KEY or ""}
 
-    url = f"{_evolution_base()}/message/sendText/pholar-notifier"
-    payload = json.dumps({"number": number, "text": message}).encode()
+
+# ─── Low-level HTTP helpers ───────────────────────────────────────────────────
+
+def _get(path: str, timeout: int = 5) -> dict:
+    req = urllib.request.Request(f"{_base()}{path}", headers=_headers())
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read())
+
+
+def _post(path: str, body: dict | None = None, timeout: int = 10) -> dict:
+    data = json.dumps(body or {}).encode() if body is not None else None
     req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "apikey": settings.EVOLUTION_API_KEY,
-        },
+        f"{_base()}{path}",
+        data=data,
+        headers={**_headers(), "Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        resp.read()
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read())
 
+
+def _delete(path: str, timeout: int = 10) -> dict:
+    req = urllib.request.Request(
+        f"{_base()}{path}",
+        headers=_headers(),
+        method="DELETE",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read())
+
+
+# ─── Public service functions ─────────────────────────────────────────────────
 
 def get_whatsapp_connection_status() -> dict:
     """
     GET /instance/connectionState/pholar-notifier.
-    Returns {"connected": bool, "state": str}. Never raises.
+    Returns {"connected": bool, "state": str, "phone": str | None}.
+    Never raises — returns error state on failure.
     """
     if not settings.EVOLUTION_API_KEY:
-        return {"connected": False, "state": "unconfigured"}
-
-    url = f"{_evolution_base()}/instance/connectionState/pholar-notifier"
+        return {"connected": False, "state": "unconfigured", "phone": None}
     try:
-        req = urllib.request.Request(
-            url,
-            headers={"apikey": settings.EVOLUTION_API_KEY},
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read())
-            state = data.get("instance", {}).get("state", "unknown")
-            return {"connected": state == "open", "state": state}
+        data = _get(f"/instance/connectionState/{INSTANCE_NAME}")
+        instance_data = data.get("instance", {})
+        state = instance_data.get("state", "unknown")
+        # Some Evolution API versions include the linked user inside the state response
+        user = instance_data.get("user") or {}
+        raw_id = user.get("id", "")
+        phone = raw_id.split("@")[0] if raw_id else None
+        return {"connected": state == "open", "state": state, "phone": phone}
     except Exception as exc:
         logger.error("WhatsApp status check failed: %s", exc)
-        return {"connected": False, "state": "error"}
+        return {"connected": False, "state": "error", "phone": None}
+
+
+def get_whatsapp_qr() -> dict:
+    """
+    GET /instance/connect/pholar-notifier — returns a fresh QR code for pairing.
+    Returns {"base64": str | None, "code": str | None}.
+    base64 is a full data URI (data:image/png;base64,...) ready for an <img src>.
+    Never raises — returns nulls with an "error" key on failure.
+    """
+    if not settings.EVOLUTION_API_KEY:
+        return {"base64": None, "code": None, "error": "EVOLUTION_API_KEY not configured"}
+    try:
+        data = _get(f"/instance/connect/{INSTANCE_NAME}", timeout=15)
+        # Evolution API v2: {"pairingCode": null, "code": "...", "base64": "data:image/png;..."}
+        # Some versions nest under "qrcode": {"base64": "..."}
+        qr_block = data.get("qrcode") or {}
+        base64_val = data.get("base64") or qr_block.get("base64")
+        code_val = data.get("code") or qr_block.get("code")
+        return {"base64": base64_val, "code": code_val}
+    except urllib.error.HTTPError as exc:
+        body: dict = {}
+        try:
+            body = json.loads(exc.read())
+        except Exception:
+            pass
+        logger.warning("WhatsApp QR returned HTTP %s: %s", exc.code, body)
+        return {"base64": None, "code": None, "error": body.get("message", f"HTTP {exc.code}")}
+    except Exception as exc:
+        logger.error("WhatsApp QR fetch failed: %s", exc)
+        return {"base64": None, "code": None, "error": str(exc)}
+
+
+def logout_whatsapp() -> None:
+    """
+    DELETE /instance/logout/pholar-notifier — disconnect the linked WhatsApp account.
+    Raises on failure so the caller can surface the error to the admin.
+    """
+    if not settings.EVOLUTION_API_KEY:
+        raise RuntimeError("EVOLUTION_API_KEY is not configured.")
+    _delete(f"/instance/logout/{INSTANCE_NAME}")
+
+
+def send_whatsapp_notification(number: str, message: str) -> None:
+    """
+    POST /message/sendText/pholar-notifier — send a text message.
+    Raises urllib.error.URLError / RuntimeError on failure.
+    Use notify() from route handlers, not this function directly.
+    """
+    if not settings.EVOLUTION_API_KEY:
+        raise RuntimeError("EVOLUTION_API_KEY is not configured.")
+    _post(f"/message/sendText/{INSTANCE_NAME}", {"number": number, "text": message})
 
 
 def notify(event: NotificationEvent, message: str, db: Session) -> None:
@@ -116,19 +183,15 @@ def notify(event: NotificationEvent, message: str, db: Session) -> None:
     Fire-and-forget WhatsApp notification — the sole entry point for alerts.
 
     Reads the per-event toggle and notifier number from admin_settings
-    synchronously (in the request thread, fast DB lookup), then spawns
-    a daemon thread for the actual HTTP call so it never delays the response.
-
-    Never raises, never blocks the caller.
+    synchronously (fast DB lookup), then spawns a daemon thread for the
+    HTTP call so it never delays the HTTP response. Never raises.
     """
-    # Local import avoids any circular-import risk at module load time.
     from app.services.settings_service import get_setting  # noqa: PLC0415
 
     try:
         default = "true" if _DEFAULT_ON[event] else "false"
         if get_setting(db, _TOGGLE_KEY[event], default) != "true":
             return
-
         number = get_setting(db, "notifier_whatsapp_number", "")
         if not number:
             return

@@ -35,8 +35,35 @@ def update_settings(
 def whatsapp_status(
     current_admin: AdminUser = Depends(get_current_admin),
 ):
-    """Check whether the Evolution API instance 'pholar-notifier' is connected."""
+    """
+    Check whether the Evolution API instance is connected.
+    Returns {connected: bool, state: str, phone: str | None}.
+    """
     return whatsapp.get_whatsapp_connection_status()
+
+
+@router.get("/whatsapp/qr")
+def whatsapp_qr(
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    """
+    Fetch a fresh QR code from Evolution API for pairing a WhatsApp account.
+    Returns {base64: str | None, code: str | None}.
+    base64 is a full data URI ready for <img src>.
+    """
+    return whatsapp.get_whatsapp_qr()
+
+
+@router.post("/whatsapp/logout")
+def whatsapp_logout(
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    """Disconnect the linked WhatsApp account so a new number can be paired."""
+    try:
+        whatsapp.logout_whatsapp()
+        return {"ok": True}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Logout failed: {exc}")
 
 
 @router.post("/whatsapp/test")
