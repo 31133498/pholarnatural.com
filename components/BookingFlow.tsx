@@ -12,7 +12,7 @@ import { getAvailableSlots, createBooking } from '@/lib/api/bookings'
 import { formatPrice, formatDuration, formatTime, formatDateLong, depositFor, addMinutes } from '@/lib/format'
 import { CANCELLATION_POLICY, CURRENCY, DEPOSIT_RATE } from '@/lib/config'
 import { lastBooking, makeBookingReference, nowISO } from '@/lib/session-store'
-import type { Booking, Service } from '@/lib/types'
+import type { Booking, BookingStatus, Service } from '@/lib/types'
 
 const STEP_LABELS = ['Service', 'Date', 'Time'] as const
 
@@ -116,7 +116,7 @@ export default function BookingFlow({ services, blockedDates }: BookingFlowProps
         booking_date: date,
         start_time: time,
         end_time: addMinutes(time, service.duration_minutes),
-        status: response.status,
+        status: response.status as BookingStatus,
         deposit_cents: response.deposit_cents,
         stripe_payment_intent_id: null,
         cancellation_reason: null,

@@ -12,7 +12,7 @@ import { CURRENCY } from '@/lib/config'
 import { lastOrder, makeOrderNumber, nowISO } from '@/lib/session-store'
 import { createOrder } from '@/lib/api/orders'
 import { validateDiscount } from '@/lib/api/discounts'
-import type { Order, ShippingAddress } from '@/lib/types'
+import type { Order, OrderStatus, ShippingAddress } from '@/lib/types'
 
 type Errors = Partial<Record<keyof ShippingAddress | 'email', string>>
 
@@ -131,7 +131,7 @@ export default function CheckoutPage() {
         subtotal_cents: response.subtotal_cents,
         shipping_cents: response.shipping_cents,
         total_cents: response.total_cents,
-        status: response.status,
+        status: response.status as OrderStatus,
         stripe_payment_intent_id: null,
         created_at: nowISO(),
         items: items.map((i, idx) => ({
