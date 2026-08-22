@@ -23,12 +23,20 @@ type SocialLinks = {
 }
 
 async function getSocialLinks(): Promise<SocialLinks> {
+  const empty: SocialLinks = { instagram_url: '', facebook_url: '', tiktok_url: '' }
+  const base = process.env.NEXT_PUBLIC_API_URL ?? ''
+  // Skip fetch entirely when there is no base URL (build-time without env var configured).
+  if (!base) return empty
   try {
-    const base = process.env.NEXT_PUBLIC_API_URL ?? ''
+    const controller = new AbortController()
+    // 4-second hard ceiling — prevents hanging Vercel build workers.
+    const timer = setTimeout(() => controller.abort(), 4000)
     const res = await fetch(`${base}/api/v1/settings/public`, {
       next: { revalidate: 300 },
+      signal: controller.signal,
     })
-    if (!res.ok) throw new Error('non-ok')
+    clearTimeout(timer)
+    if (!res.ok) return empty
     const d = await res.json()
     return {
       instagram_url: d.instagram_url ?? '',
@@ -36,7 +44,7 @@ async function getSocialLinks(): Promise<SocialLinks> {
       tiktok_url: d.tiktok_url ?? '',
     }
   } catch {
-    return { instagram_url: '', facebook_url: '', tiktok_url: '' }
+    return empty
   }
 }
 

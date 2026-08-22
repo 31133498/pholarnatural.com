@@ -124,8 +124,19 @@ export async function apiClient<T>(
         errorBody !== null &&
         'detail' in errorBody
       ) {
-        // FastAPI always puts the human-readable reason in `detail`
-        message = String((errorBody as { detail: unknown }).detail)
+        const detail = (errorBody as { detail: unknown }).detail
+        if (Array.isArray(detail)) {
+          // FastAPI 422 Pydantic validation errors: [{loc, msg, type}, …]
+          message = detail
+            .map((e) =>
+              typeof e === 'object' && e !== null && 'msg' in e
+                ? String((e as { msg: unknown }).msg)
+                : JSON.stringify(e),
+            )
+            .join('; ')
+        } else {
+          message = String(detail)
+        }
       }
     } catch {
       // Body wasn't JSON — keep the default message.
