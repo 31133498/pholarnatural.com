@@ -11,6 +11,14 @@ import {
   Smartphone,
   RefreshCw,
   LogOut,
+  ShoppingBag,
+  CalendarDays,
+  CalendarX,
+  MessageSquare,
+  PackageOpen,
+  TicketPercent,
+  CreditCard,
+  type LucideIcon,
 } from 'lucide-react'
 import { PageHeader, AdminButton } from '@/components/admin/ui'
 import { Field } from '@/components/FormField'
@@ -252,20 +260,20 @@ const NOTIFICATION_EVENTS: {
   key: keyof AdminSettingsData
   label: string
   description: string
-  emoji: string
+  Icon: LucideIcon
   note?: string
 }[] = [
-  { key: 'notify_new_order', label: 'New order', description: 'Customer places a shop order', emoji: '🛍️' },
-  { key: 'notify_new_booking', label: 'New booking', description: 'Customer books a service appointment', emoji: '📅' },
-  { key: 'notify_booking_cancelled', label: 'Booking cancelled', description: 'Customer or admin cancels an appointment', emoji: '❌' },
-  { key: 'notify_new_contact_message', label: 'New contact message', description: 'Customer submits the contact form', emoji: '💬' },
-  { key: 'notify_low_stock', label: 'Low stock', description: 'A product variant drops below the threshold', emoji: '⚠️' },
-  { key: 'notify_discount_maxed_out', label: 'Discount maxed out', description: 'A promo code reaches its usage limit', emoji: '🎟️' },
+  { key: 'notify_new_order', label: 'New order', description: 'Customer places a shop order', Icon: ShoppingBag },
+  { key: 'notify_new_booking', label: 'New booking', description: 'Customer books a service appointment', Icon: CalendarDays },
+  { key: 'notify_booking_cancelled', label: 'Booking cancelled', description: 'Customer or admin cancels an appointment', Icon: CalendarX },
+  { key: 'notify_new_contact_message', label: 'New contact message', description: 'Customer submits the contact form', Icon: MessageSquare },
+  { key: 'notify_low_stock', label: 'Low stock', description: 'A product variant drops below the threshold', Icon: PackageOpen },
+  { key: 'notify_discount_maxed_out', label: 'Discount maxed out', description: 'A promo code reaches its usage limit', Icon: TicketPercent },
   {
     key: 'notify_payment_failed',
     label: 'Payment failed',
     description: 'Stripe reports a payment failure (Phase 9)',
-    emoji: '💳',
+    Icon: CreditCard,
     note: 'Enable once Stripe is connected in Phase 9. Default stays OFF until then.',
   },
 ]
@@ -372,7 +380,7 @@ export default function AdminSettingsPage() {
                   />
                   <label htmlFor={`toggle-${ev.key}`} className="flex-1 cursor-pointer">
                     <span className="flex items-center gap-2 font-body-md text-body-md font-semibold text-on-surface">
-                      <span aria-hidden="true">{ev.emoji}</span>
+                      <ev.Icon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                       {ev.label}
                     </span>
                     <span className="block font-body-md text-[12px] text-on-surface-variant">
