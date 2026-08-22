@@ -26,12 +26,19 @@ def get_order_detail(db: Session, order_id):
     return order
 
 def update_order_status(db: Session, order_id, status_in: OrderStatusUpdate):
-    """Update the fulfillment status of an order."""
-    order = db.query(Order).filter(Order.id == order_id).first()
+    """Update the fulfillment status of an order and email the customer."""
+    order = db.query(Order).options(selectinload(Order.items)).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     order.status = status_in.status
     db.commit()
+    db.refresh(order)
+
+    from app.services.email import send_email, order_status_update_email  # noqa: PLC0415
+    result = order_status_update_email(order, status_in.status)
+    if result:
+        subject, html = result
+        send_email(order.customer_email, subject, html)
 
 # Shipping defaults (overridden by admin_settings keys of the same name)
 _SHIPPING_DEFAULTS: dict[str, int] = {

@@ -238,6 +238,91 @@ def booking_confirmation_email(booking) -> tuple[str, str]:
     return subject, _base(preheader=f"Your {service_name} appointment on {date_str} at {start_str} is confirmed.", content=content)
 
 
+# ── Order status update (customer) ────────────────────────────────────────────
+
+_STATUS_COPY: dict[str, tuple[str, str, str, str]] = {
+    # status: (headline, body, preheader, accent_hex)
+    "confirmed": (
+        "We're preparing your order",
+        "Great news — we've confirmed your order and are getting it packed up. We'll send you another email as soon as it ships.",
+        "Your order is confirmed and being prepared.",
+        "#2563EB",
+    ),
+    "processing": (
+        "Your order is being packed",
+        "Your items are being picked and packed right now. Expect a shipping notification shortly.",
+        "Your order is being packed and will ship soon.",
+        "#D97706",
+    ),
+    "shipped": (
+        "Your order is on its way!",
+        "Your package has been dispatched. Depending on your location, delivery typically takes 3&ndash;7 business days from the ship date.",
+        "Your Pholar Natural order has shipped — it's on the way!",
+        "#7C3AED",
+    ),
+    "delivered": (
+        "Your order has been delivered",
+        "We hope you love your new products! If anything isn't right, reply to this email or reach out to us at <a href=\"mailto:{support}\" style=\"color:#059669;\">{support}</a> and we'll make it right.",
+        "Your order has arrived — enjoy!",
+        "#059669",
+    ),
+}
+
+
+def order_status_update_email(order, new_status: str) -> tuple[str, str] | None:
+    """
+    Returns (subject, html) for a customer status-update email, or None if the
+    status has no customer-facing email (e.g. 'paid' — that's the confirmation email).
+    Call while the DB session is open.
+    """
+    copy = _STATUS_COPY.get(new_status)
+    if not copy:
+        return None
+
+    headline, body_text, preheader, accent = copy
+    body_text = body_text.replace("{support}", _SUPPORT)
+
+    order_num = f"PN-{str(order.id)[:8].upper()}"
+
+    items_rows = ""
+    for item in order.items:
+        items_rows += (
+            f'<tr>'
+            f'<td style="padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:14px;color:#1B1D2F;font-family:{_FONT};">'
+            f'{item.product_name}'
+            f'<span style="display:block;font-size:12px;color:#9CA3AF;">{item.variant_label}</span>'
+            f'</td>'
+            f'<td style="padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:14px;color:#6B7280;text-align:center;font-family:{_FONT};">&times;{item.quantity}</td>'
+            f'<td style="padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:14px;font-weight:600;color:#1B1D2F;text-align:right;font-family:{_FONT};">{_cad(item.unit_price_cents * item.quantity)}</td>'
+            f'</tr>'
+        )
+
+    status_label = new_status.upper()
+
+    content = (
+        f'<div style="margin:0 0 24px;padding:16px 20px;background-color:{accent}14;border-left:4px solid {accent};border-radius:4px;">'
+        f'<p style="margin:0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:{accent};font-family:{_FONT};">Order {status_label}</p>'
+        f'<p style="margin:4px 0 0;font-size:13px;color:#6B7280;font-family:{_FONT};">Reference <strong style="color:#1B1D2F;">{order_num}</strong></p>'
+        f'</div>'
+        f'<p style="margin:0 0 6px;font-size:22px;font-weight:700;color:#1B1D2F;font-family:{_FONT};">{headline}</p>'
+        f'<p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.7;font-family:{_FONT};">Hi {order.customer_name},<br><br>{body_text}</p>'
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-top:2px solid #1B1D2F;">'
+        f'<tr>'
+        f'<th style="padding:10px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#9CA3AF;text-align:left;font-family:{_FONT};">Item</th>'
+        f'<th style="padding:10px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#9CA3AF;text-align:center;font-family:{_FONT};">Qty</th>'
+        f'<th style="padding:10px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#9CA3AF;text-align:right;font-family:{_FONT};">Price</th>'
+        f'</tr>'
+        f'{items_rows}'
+        f'<tr><td colspan="3" style="padding:14px 0 0;border-top:2px solid #1B1D2F;font-size:17px;font-weight:700;color:#1B1D2F;font-family:{_FONT};">'
+        f'Total &nbsp;<span style="color:{accent};">{_cad(order.total_cents)}</span></td></tr>'
+        f'</table>'
+        f'<p style="margin:28px 0 0;font-size:13px;color:#9CA3AF;text-align:center;line-height:1.5;font-family:{_FONT};">Questions? <a href="mailto:{_SUPPORT}" style="color:#2563EB;text-decoration:none;">{_SUPPORT}</a><br>All prices in CAD.</p>'
+    )
+
+    subject = f"Order {new_status} — {order_num}"
+    return subject, _base(preheader=preheader, content=content)
+
+
 # ── Admin: order notification ──────────────────────────────────────────────────
 
 def admin_order_notification_email(order) -> tuple[str, str]:
